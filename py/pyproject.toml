@@ -1,0 +1,18 @@
+[project]
+name = "py"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "gguf>=0.17.1",
+    "libellula>=1.2.1",
+    "llama-cpp-python>=0.3.16",
+    "torch>=2.10.0",
+    "transformers>=5.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.14",
+]
