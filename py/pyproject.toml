@@ -8,6 +8,7 @@ dependencies = [
     "gguf>=0.17.1",
     "libellula>=1.2.1",
     "llama-cpp-python>=0.3.16",
+    "protobuf>=6.33.5",
     "torch>=2.10.0",
     "transformers>=5.0.0",
 ]

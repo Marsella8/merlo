@@ -45,4 +45,3 @@ Matrix load_matrix(const char* name, const int layer);
 QMatrix load_qmatrix(const char *name, const int layer);
 
 #endif // MODEL_H
-

@@ -12,12 +12,12 @@ int main() {
     Vocab vocab = load_vocab();
     Matrix tokens = tokenize(prompt, &vocab);
     KVCache cache = prefill(model, tokens);
-    printf(prompt);
+    printf("%s", prompt);
     for (int pos = tokens.cols; pos < MAX_SEQ_LEN; pos++) {
         size_t last_token_id = (size_t)*at(tokens, 0, tokens.cols - 1);
         size_t token_id = fwd(model, &cache, last_token_id, pos);
         
-        char* str = detokenize_token(token_id, &vocab);
+        char* str = v.tokens[token_id];
         printf("%s", str);
         fflush(stdout);
     }

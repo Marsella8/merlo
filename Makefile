@@ -10,7 +10,7 @@ OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_SRCS = $(wildcard $(TEST_DIR)/*.c)
 TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=$(BUILD_DIR)/test_%)
 
-.PHONY: all clean test
+.PHONY: all clean test lint
 
 all: $(BUILD_DIR) $(OBJS)
 
@@ -19,6 +19,9 @@ $(BUILD_DIR):
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+lint:
+	clang-tidy $(SRCS) -- $(CFLAGS)
 
 test: $(TEST_BINS)
 	@for test in $(TEST_BINS); do \

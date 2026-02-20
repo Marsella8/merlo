@@ -23,8 +23,16 @@ Matrix silu(Matrix x) {
 
 
 Matrix embed(Matrix embeddings, Matrix tokens) {
-    panic("Not implemented");
-    return (Matrix){0};
+#ifdef SAFETY
+    assert(tokens.rows == 1);
+#endif
+    Buffer* b = buf(tokens.cols * embeddings.cols * sizeof(float));
+    Matrix m = mat(b, tokens.cols, embeddings.cols);
+    for (size_t i = 0; i < tokens.cols; i++) {
+        size_t id = (size_t)*at(tokens, 0, i);
+        memcpy(at(m, i, 0), at(embeddings, id, 0), embeddings.cols * sizeof(float));
+    }
+    return m;
 }
 
 Matrix rope(Matrix x, int pos) {

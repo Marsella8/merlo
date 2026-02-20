@@ -6,14 +6,13 @@
 #include <stdint.h>
 
 const char* PATH = "model/";
-const size_t MAX_NAME = 256;
 
 static FILE* get_file(const char *name, const int layer) {
-    char dest[MAX_NAME]; 
+    char dest[256]; 
     if (layer == -1) {
-        snprintf(dest, MAX_NAME, "%s%s", PATH, name);
+        snprintf(dest, 256, "%s%s", PATH, name);
     } else {
-        snprintf(dest, MAX_NAME, "%s%d.%s", PATH, layer, name);
+        snprintf(dest, 256, "%s%d.%s", PATH, layer, name);
     }
     FILE* f = fopen(dest, "rb");
     assert(f!=NULL);

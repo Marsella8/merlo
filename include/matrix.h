@@ -35,7 +35,7 @@ int8_t* at_i8(QMatrix mat, size_t r, size_t c);
 #define at(m, r, c) _Generic((m), \
     Matrix: at_f32, \
     QMatrix: at_i8  \
-)(m, r, c)
+)(m, r, c)  
 
 Buffer* buf(size_t size);
 void free_buf(Buffer* b_ptr);

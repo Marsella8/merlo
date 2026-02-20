@@ -1,11 +1,13 @@
 #include "utils.h"
+#include <assert.h>
+#include <string.h>
+#include <stdlib.h>
 
-void panic(const char* message) {
-    fprintf(stderr, "%s, %d: %s\n", __FILE__, __LINE__, message);
-    exit(1);
-}
-
-void not_implemented() {
-    fprintf(stderr, "%s, %d: NOT IMPLEMENTED\n", __FILE__, __LINE__);
-    exit(1);
+char* substr(const char* str, size_t start, size_t end) {
+    size_t len = end - start;
+    char* result = malloc(len + 1);
+    assert(result != NULL);
+    memcpy(result, str + start, len);
+    result[len] = '\0';
+    return result;
 }
