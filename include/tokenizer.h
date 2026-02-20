@@ -13,7 +13,7 @@ typedef struct {
 } Vocab;
 
 Vocab load_vocab();
-void free_vocab(Vocab* v);
+void free_vocab(Vocab v);
 
 int tokenize_single_token(char* string, const Vocab* v);
 Matrix tokenize(const char* string, const Vocab* v);

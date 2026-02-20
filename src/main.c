@@ -11,21 +11,20 @@ int main() {
     SmolLM2 model = load_model();
     Vocab vocab = load_vocab();
     Matrix tokens = tokenize(prompt, &vocab);
-    KVCache cache = prefill(model, tokens);
     printf("%s", prompt);
     for (int pos = tokens.cols; pos < MAX_SEQ_LEN; pos++) {
         size_t last_token_id = (size_t)*at(tokens, 0, tokens.cols - 1);
-        size_t token_id = fwd(model, &cache, last_token_id, pos);
-        
-        char* str = v.tokens[token_id];
+        Matrix logits = fwd(model, model.cache, last_token_id, pos);
+        size_t token = argmax(logits);
+        char* str = vocab.tokens[token];
         printf("%s", str);
         fflush(stdout);
+        free_mat(logits);
     }
 
-    free_model(&model);
-    free_vocab(&vocab);
-    free_buf(tokens.buffer);
-    // Note: KVCache buffers
+    free_model(model);
+    free_vocab(vocab);
+    free_mat(tokens);
 
     return 0;
 }

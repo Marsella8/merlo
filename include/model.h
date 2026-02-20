@@ -8,10 +8,11 @@
 #define VOCAB_SIZE 49152
 #define HIDDEN_SIZE 576
 #define INTERMEDIATE_SIZE 1536
-#define NUM_HEADS 9
+#define HEAD_DIM 64
+#define NUM_Q_HEADS 9
 #define NUM_KV_HEADS 3
+#define KV_SIZE (NUM_KV_HEADS * HEAD_DIM)
 #define MAX_SEQ_LEN 2048
-#define HEAD_DIM (HIDDEN_SIZE / NUM_HEADS)
 #define RMS_NORM_EPS 1e-05f
 #define ROPE_THETA 100000.0f
 
@@ -24,13 +25,6 @@ typedef struct {
 } Block;
 
 typedef struct {
-    Matrix embeddings;
-    Block blocks[NUM_LAYERS];
-    Matrix final_norm;
-    Matrix lm_head;
-} SmolLM2;
-
-typedef struct {
     Matrix k;
     Matrix v;
 } LayerCache;
@@ -39,8 +33,18 @@ typedef struct {
     LayerCache caches[NUM_LAYERS]; 
 } KVCache;
 
+typedef struct {
+    Matrix embeddings;
+    Block blocks[NUM_LAYERS];
+    Matrix final_norm;
+    Matrix lm_head;
+    KVCache cache;
+} SmolLM2;
+
+size_t size(LayerCache cache);
 SmolLM2 load_model();
-void free_model(SmolLM2* model);
+void free_kvcache(KVCache cache);
+void free_model(SmolLM2 model);
 Matrix load_matrix(const char* name, const int layer);
 QMatrix load_qmatrix(const char *name, const int layer);
 

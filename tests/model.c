@@ -4,7 +4,7 @@
 #include "matrix.h"
 
 void test_embeddings_shape() {
-    printf("test_embeddings_shape\n");
+    printf("  test_embeddings_shape\n");
     SmolLM2 model = load_model();
     
     assert(model.embeddings.rows == VOCAB_SIZE);
@@ -13,7 +13,7 @@ void test_embeddings_shape() {
 }
 
 void test_block_shapes() {
-    printf("test_block_shapes\n");
+    printf("  test_block_shapes\n");
     SmolLM2 model = load_model();
     
     for (size_t i = 0; i < NUM_LAYERS; i++) {
@@ -49,6 +49,7 @@ void test_block_shapes() {
 }
 
 void test_final_norm_shape() {
+    printf("  test_final_norm_shape\n");
     SmolLM2 model = load_model();
     
     assert(model.final_norm.rows == 1);
@@ -56,6 +57,7 @@ void test_final_norm_shape() {
 }
 
 void test_lm_head_shape() {
+    printf("  test_lm_head_shape\n");
     SmolLM2 model = load_model();
     
     assert(model.lm_head.rows == HIDDEN_SIZE);
@@ -63,6 +65,7 @@ void test_lm_head_shape() {
 }
 
 int main() {
+    printf("model tests:\n");
     test_embeddings_shape();
     test_block_shapes();
     test_final_norm_shape();

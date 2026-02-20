@@ -23,15 +23,13 @@ Vocab load_vocab() {
     return (Vocab){.tokens = tokens, .size = num_tokens};
 }
 
-void free_vocab(Vocab* v) {
-    if (v->tokens) {
-        for (size_t i = 0; i < v->size; i++) {
-            if (v->tokens[i]) free(v->tokens[i]);
+void free_vocab(Vocab v) {
+    if (v.tokens) {
+        for (size_t i = 0; i < v.size; i++) {
+            if (v.tokens[i]) free(v.tokens[i]);
         }
-        free(v->tokens);
+        free(v.tokens);
     }
-    v->tokens = NULL;
-    v->size = 0;
 }
 
 // no optionals, fuck! don't like this code

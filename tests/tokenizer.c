@@ -12,7 +12,7 @@ Vocab vocab = {
 };
 
 void test_tokenize_single_token() {
-    printf("test_tokenize_single_token\n");
+    printf("  test_tokenize_single_token\n");
     
     {
         const char* input = "baa";
@@ -37,7 +37,7 @@ void test_tokenize_single_token() {
 }
 
 void test_tokenize() {
-    printf("test_tokenize\n");
+    printf("  test_tokenize\n");
 
     {
         const char* input = "aaabbba";
@@ -47,8 +47,8 @@ void test_tokenize() {
 
         assert(eq(output, correct));
         
-        free_buf(output.buffer);
-        free_buf(correct.buffer);
+        free_mat(output);
+        free_mat(correct);
     }
 
     {
@@ -59,8 +59,8 @@ void test_tokenize() {
 
         assert(eq(output, correct));
 
-        free_buf(output.buffer);
-        free_buf(correct.buffer);
+        free_mat(output);
+        free_mat(correct);
     }
 
     {
@@ -71,13 +71,13 @@ void test_tokenize() {
 
         assert(eq(output, correct));
 
-        free_buf(output.buffer);
-        free_buf(correct.buffer);
+        free_mat(output);
+        free_mat(correct);
     }
 }
 
 void test_load_vocab() {
-    printf("test_load_vocab\n");
+    printf("  test_load_vocab\n");
     Vocab v = load_vocab();
     
     {
@@ -99,11 +99,11 @@ void test_load_vocab() {
         assert(strcmp(output, correct) == 0);
     }
     
-    free_vocab(&v);
+    free_vocab(v);
 }
 
 void test_tokenize_full() {
-    printf("test_tokenize_full\n");
+    printf("  test_tokenize_full\n");
     Vocab v = load_vocab();
     
     {
@@ -113,20 +113,16 @@ void test_tokenize_full() {
         Matrix correct = mat_from_array(1, 11, correct_data);
         
         Matrix output = tokenize(input, &v);
-        for (size_t i = 0; i < output.cols; i++) {
-            printf("%f ", *at(output, 0, i));
-        }
-        printf("\n");
         assert(eq(output, correct));
-        free_buf(output.buffer);
-        free_buf(correct.buffer);
+        free_mat(output);
+        free_mat(correct);
     }
     
-    free_vocab(&v);
+    free_vocab(v);
 }
 
 void test_detokenize() {
-    printf("test_detokenize\n");
+    printf("  test_detokenize\n");
 
     {
         float tokens_data[1][3] = {{8.0f, 3.0f, 4.0f}}; // "baa", "bb", "ba" -> "baabbba"
@@ -134,12 +130,12 @@ void test_detokenize() {
         char* output = detokenize(tokens, &vocab);
         assert(strcmp(output, "baabbba") == 0);
         free(output);
-        free_buf(tokens.buffer);
+        free_mat(tokens);
     }
 }
 
 void test_detokenize_full() {
-    printf("test_detokenize_full\n");
+    printf("  test_detokenize_full\n");
     Vocab v = load_vocab();
     
     {
@@ -149,18 +145,18 @@ void test_detokenize_full() {
         char* output = detokenize(tokens, &v);
         assert(strcmp(output, input) == 0);
         free(output);
-        free_buf(tokens.buffer);
+        free_mat(tokens);
     }
     
-    free_vocab(&v);
+    free_vocab(v);
 }
 
 int main() {
+    printf("tokenizer tests:\n");
     test_tokenize();
     test_detokenize();
     test_load_vocab();
     test_tokenize_full();
     test_detokenize_full();
-    printf("Done!\n");
     return 0;
 }

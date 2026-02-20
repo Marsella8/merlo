@@ -35,6 +35,10 @@ int8_t* at_i8(QMatrix mat, size_t r, size_t c) {
 Buffer* buf(size_t size) {
     Buffer* b_ptr = malloc(sizeof(Buffer));
     b_ptr->data = malloc(size);
+#ifdef SAFETY
+    assert(b_ptr != NULL);
+    assert(b_ptr->data != NULL);
+#endif
     b_ptr->size = size;
     return b_ptr;
 }
@@ -42,6 +46,10 @@ Buffer* buf(size_t size) {
 void free_buf(Buffer* b_ptr) {
     free(b_ptr->data);
     free(b_ptr);
+}
+
+void free_mat(Matrix m) {
+    free_buf(m.buffer);
 }
 
 Matrix mat(const Buffer* buffer, size_t rows, size_t cols) {
@@ -54,6 +62,11 @@ Matrix mat(const Buffer* buffer, size_t rows, size_t cols) {
         .offset = 0
     };
     return mat;
+}
+
+Matrix empty(size_t rows, size_t cols) {
+    Buffer* b = buf(rows * cols * sizeof(float));
+    return mat(b, rows, cols);
 }
 
 Matrix mat_from_array(size_t rows, size_t cols, float m[rows][cols]) {
@@ -77,6 +90,17 @@ bool eq(Matrix a, Matrix b) {
     return 1;
 }
 
+void copy(Matrix src, Matrix dst) {
+#ifdef SAFETY
+    assume_shape(src, dst.rows, dst.cols);
+#endif
+    for (size_t i = 0; i < src.rows; i++) {
+        for (size_t j = 0; j < src.cols; j++) {
+            *at(dst, i, j) = *at(src, i, j);
+        }
+    }
+}
+
 
 Matrix transpose(Matrix mat) {
     Matrix transposed = {
@@ -90,12 +114,25 @@ Matrix transpose(Matrix mat) {
     return transposed;
 }
 
+Matrix slice(Matrix mat, size_t r_start, size_t r_end, size_t c_start, size_t c_end) {
+#ifdef SAFETY
+    assert(r_start <= r_end && r_end <= mat.rows);
+    assert(c_start <= c_end && c_end <= mat.cols);
+#endif
+    Matrix s = {
+        .buffer = mat.buffer,
+        .rows = r_end - r_start,
+        .cols = c_end - c_start,
+        .row_stride = mat.row_stride,
+        .col_stride = mat.col_stride,
+        .offset = mat.offset + r_start * mat.row_stride + c_start * mat.col_stride
+    };
+    return s;
+}
+
 Matrix add(Matrix a, Matrix b) {
 #ifdef SAFETY
-    if (a.rows != b.rows || a.cols != b.cols) {
-        fprintf(stderr, "Error: Matrix dimensions mismatch in add()\n");
-        exit(1);
-    }
+    assume_shape(a, b.rows, b.cols);
 #endif
     
     size_t size = a.rows * a.cols * sizeof(float);
@@ -120,10 +157,7 @@ Matrix add(Matrix a, Matrix b) {
 
 Matrix matmul(Matrix a, Matrix b) {
 #ifdef SAFETY
-    if (a.cols != b.rows) {
-        fprintf(stderr, "Error: Matrix dimensions incompatible for matmul()\n");
-        exit(1);
-    }
+    assert(a.cols == b.rows);
 #endif
     
     size_t size = a.rows * b.cols * sizeof(float);
@@ -150,11 +184,43 @@ Matrix matmul(Matrix a, Matrix b) {
     return result;
 }
 
+Matrix masked_matmul(Matrix a, Matrix b) {
+    #ifdef SAFETY
+        assert(a.cols == b.rows);
+    #endif
+        
+        size_t size = a.rows * b.cols * sizeof(float);
+        
+        Matrix result = {
+            .buffer = buf(size),
+            .rows = a.rows,
+            .cols = b.cols,
+            .row_stride = b.cols,
+            .col_stride = 1,
+            .offset = 0
+        };
+        
+        for (size_t i = 0; i < a.rows; i++) {
+            for (size_t j = 0; j <= i; j++) {
+                float sum = 0.0f;
+                for (size_t k = 0; k < a.cols; k++) {
+                    sum += *at(a, i, k) * *at(b, k, j);
+                }
+                *at(result, i, j) = sum;
+            }
+            for (size_t j = i + 1; j < b.cols; j++) {
+                *at(result, i, j) = 0.0f;
+            }
+        }
+        
+        return result;
+    }
+
 Matrix qmatmul(Matrix a, QMatrix b) {
     //TODO: make more performant by doing it directly
     Matrix dq = dequantize(b);
     Matrix m = matmul(a, dq);
-    free_buf(dq.buffer);
+    free_mat(dq);
     return m;
 }
 

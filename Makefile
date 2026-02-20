@@ -1,18 +1,22 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DSAFETY
+# Otherwise the stack gets smashed uhhhh
+LDFLAGS = -Wl,-z,stack-size=1073741824 -lm
+
 SRC_DIR = src
 BUILD_DIR = build
 TEST_DIR = tests
 
 SRCS = $(wildcard $(SRC_DIR)/*.c)
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+OBJS_NO_MAIN = $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
 
 TEST_SRCS = $(wildcard $(TEST_DIR)/*.c)
 TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=$(BUILD_DIR)/test_%)
 
-.PHONY: all clean test lint
+.PHONY: all clean test lint debug
 
-all: $(BUILD_DIR) $(OBJS)
+all: $(BUILD_DIR) $(OBJS) $(TEST_BINS)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -23,19 +27,22 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 lint:
 	clang-tidy $(SRCS) -- $(CFLAGS)
 
+debug: CFLAGS += -g -O0
+debug: clean all
+
 test: $(TEST_BINS)
 	@for test in $(TEST_BINS); do \
-		echo "Running $$test..."; \
 		./$$test; \
-		if [ $$? -ne 0 ]; then \
-			echo "Test $$test failed!"; \
-			exit 1; \
+		if [ $$? -eq 0 ]; then \
+			echo "passed!"; \
+		else \
+			echo "failed!"; \
 		fi; \
-		echo "Test $$test passed"; \
+		echo; \
 	done
 
-$(BUILD_DIR)/test_%: $(TEST_DIR)/%.c $(filter-out $(BUILD_DIR)/main.o, $(OBJS)) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $< $(filter-out $(BUILD_DIR)/main.o, $(OBJS)) -o $@ -lm
+$(BUILD_DIR)/test_%: $(TEST_DIR)/%.c $(OBJS_NO_MAIN) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $< $(OBJS_NO_MAIN) -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD_DIR)
