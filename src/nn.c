@@ -38,7 +38,20 @@ Matrix embed(Matrix embeddings, Matrix tokens) {
 }
 
 Matrix rope(Matrix x, size_t pos) {
-    return x;
+    Matrix out = empty(x.rows, x.cols);
+    for (size_t t = 0; t < x.rows; t++) {
+        for (size_t i = 0; i < x.cols; i += 2) {
+            float freq = 1.0f / powf(ROPE_THETA, (float)(i % HEAD_DIM) / HEAD_DIM);
+            float angle = (pos + t) * freq;
+            float cos_a = cosf(angle);
+            float sin_a = sinf(angle);
+            float x0 = *at(x, t, i);
+            float x1 = *at(x, t, i + 1);
+            *at(out, t, i)     = x0 * cos_a - x1 * sin_a;
+            *at(out, t, i + 1) = x0 * sin_a + x1 * cos_a;
+        }
+    }
+    return out;
 }
 
 Matrix rms_norm(Matrix x, Matrix weight) {
