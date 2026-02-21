@@ -37,8 +37,7 @@ Matrix embed(Matrix embeddings, Matrix tokens) {
     return m;
 }
 
-Matrix rope(Matrix x, LayerCache cache) {
-    // size_t pos = cache.k.cols - x.rows
+Matrix rope(Matrix x, size_t pos) {
     return x;
 }
 
@@ -76,9 +75,14 @@ Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCa
     assume_shape(Wo, HIDDEN_SIZE, HIDDEN_SIZE);
 #endif
 
-    Matrix Q = matmul(x, Wq);
-    Matrix K = matmul(x, Wk);
+    Matrix Q_proj = matmul(x, Wq);
+    Matrix K_proj = matmul(x, Wk);
     Matrix V = matmul(x, Wv);
+
+    Matrix Q = rope(Q_proj, 0);
+    Matrix K = rope(K_proj, 0);
+    free_mat(Q_proj);
+    free_mat(K_proj);
 
 #ifdef SAFETY
     assume_shape(Q, T, HIDDEN_SIZE);

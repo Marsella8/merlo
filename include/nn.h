@@ -7,7 +7,7 @@
 
 Matrix embed(Matrix embeddings, Matrix tokens);
 
-Matrix rope(Matrix x, LayerCache cache);
+Matrix rope(Matrix x, size_t pos);
 
 Matrix rms_norm(Matrix x, Matrix weight);
 
