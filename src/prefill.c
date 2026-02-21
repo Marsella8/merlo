@@ -2,7 +2,7 @@
 #include "model.h"
 #include "nn.h"
 
-Matrix prefill_layer_fwd(Block b, Matrix x, int pos, LayerCache cache) {
+Matrix prefill_layer_fwd(Block b, Matrix x, LayerCache cache) {
     Matrix attn_norm = rms_norm(x, b.attn_norm);
     Matrix attn = prefill_gqa(attn_norm, b.q, b.k, b.v, b.o, cache);
     free_mat(attn_norm);
@@ -21,8 +21,9 @@ Matrix prefill_layer_fwd(Block b, Matrix x, int pos, LayerCache cache) {
 
 
 void prefill(SmolLM2* model, Matrix x) {
+    resize_kv(model, x.cols);
     Matrix out = embed(model->embeddings, x);
     for (int l = 0; l < NUM_LAYERS; l++) {
-        out = prefill_layer_fwd(model->blocks[l], out, 0, model->cache.caches[l]);
+        out = prefill_layer_fwd(model->blocks[l], out, model->cache.caches[l]);
     }
 }

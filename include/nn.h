@@ -7,7 +7,7 @@
 
 Matrix embed(Matrix embeddings, Matrix tokens);
 
-Matrix rope(Matrix x, int pos);
+Matrix rope(Matrix x, LayerCache cache);
 
 Matrix rms_norm(Matrix x, Matrix weight);
 
@@ -19,7 +19,7 @@ Matrix elementwise(Matrix a, Matrix b);
 
 Matrix softmax(Matrix x);
 
-Matrix engine_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache);
+Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache);
 
 Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache);
 

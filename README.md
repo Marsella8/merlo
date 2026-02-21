@@ -21,6 +21,14 @@ Go fuck yourself.
 TODO:
 - Add valgrind to check for mem leaks. Good thing is that our stuff is pretty branchless so it shouldn't be hard.
 
+- Implement the engine and the rope + tests
+- Implement pipelining (comm.h, each has a in queue to process). 
+- Implement Spec model plus inference on the Pi.
+
+Make sure numerics are correctness.
+
+Small subtlety about the spec decoding: we need to be able to roll back teh KV cache (aka resize it), this is what the resize_kv shit is for. prefill sets it to T, and decode increments it by 1, and when 
+
 Possible perf improvements:
 - Q8_0 and 1.58bit quantization
 - if matrix contiguous, then a lot of ops can be much faster (less flops to compute indices).

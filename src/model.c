@@ -73,39 +73,55 @@ static KVCache init_kvcache() {
     KVCache cache = {0};
     for (size_t i = 0; i < NUM_LAYERS; i++) {
         cache.caches[i].k = empty(KV_SIZE, MAX_SEQ_LEN);
+        cache.caches[i].k.cols = 0;
         cache.caches[i].v = empty(KV_SIZE, MAX_SEQ_LEN);
+        cache.caches[i].v.cols = 0;
     }
     return cache;
 }
 
 SmolLM2 load_model() {
     SmolLM2 model;
-    
+
     Matrix embd_transposed = load_matrix("token_embd", -1);
     model.embeddings = transpose(embd_transposed);
-    
+
     for (size_t i = 0; i < NUM_LAYERS; i++) {
         model.blocks[i] = load_block(i);
     }
-    
+
     model.final_norm = load_matrix("output_norm", -1);
     model.lm_head = embd_transposed;
 
     model.cache = init_kvcache();
-    
+
     return model;
 }
 
-static void free_block(Block* b) {
-    free_mat(b->attn_norm);
-    free_mat(b->q);
-    free_mat(b->k);
-    free_mat(b->v);
-    free_mat(b->o);
-    free_mat(b->ffn_norm);
-    free_mat(b->gate);
-    free_mat(b->up);
-    free_mat(b->down);
+static void free_block(Block b) {
+    free_mat(b.attn_norm);
+    free_mat(b.q);
+    free_mat(b.k);
+    free_mat(b.v);
+    free_mat(b.o);
+    free_mat(b.ffn_norm);
+    free_mat(b.gate);
+    free_mat(b.up);
+    free_mat(b.down);
+}
+
+void resize_kv(SmolLM2* model, size_t len) {
+    for (int l = 0; l < NUM_LAYERS; l++) {
+        model->cache.caches[l].k.cols = len;
+        model->cache.caches[l].v.cols = len;
+    }
+}
+
+void increment_kv(SmolLM2* model) {
+    for (int l = 0; l < NUM_LAYERS; l++) {
+        model->cache.caches[l].k.cols++;
+        model->cache.caches[l].v.cols++;
+    }
 }
 
 size_t size(LayerCache cache) {
@@ -120,7 +136,7 @@ size_t size(LayerCache cache) {
     void free_model(SmolLM2 model) {
         free_mat(model.embeddings);
         for (int i = 0; i < NUM_LAYERS; i++) {
-            free_block(&model.blocks[i]);
+            free_block(model.blocks[i]);
         }
         free_mat(model.final_norm);
         free_kvcache(model.cache);

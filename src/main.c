@@ -3,18 +3,19 @@
 #include "model.h"
 #include "tokenizer.h"
 #include "prefill.h"
-#include "engine.h"
+#include "decode.h"
 #include "sample.h"
 
 int main() {
     const char* prompt = "Hello my name is ";
     SmolLM2 model = load_model();
     Vocab vocab = load_vocab();
-    Matrix tokens = tokenize(prompt, &vocab);
+    Matrix tokens = tokenize(prompt, vocab);
+    prefill(&model, tokens);
     printf("%s", prompt);
     for (int pos = tokens.cols; pos < MAX_SEQ_LEN; pos++) {
         size_t last_token_id = (size_t)*at(tokens, 0, tokens.cols - 1);
-        Matrix logits = fwd(model, model.cache, last_token_id, pos);
+        Matrix logits = fwd(&model, last_token_id);
         size_t token = argmax(logits);
         char* str = vocab.tokens[token];
         printf("%s", str);

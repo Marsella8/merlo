@@ -34,16 +34,16 @@ void free_vocab(Vocab v) {
 
 // no optionals, fuck! don't like this code
 const int NOT_A_TOKEN = -1;
-int tokenize_single_token(char* string, const Vocab* v) {
-    for (size_t i = 0; i<v->size; i++) {
-        if (strcmp(string, v->tokens[i])==0)
+int tokenize_single_token(char* string, Vocab v) {
+    for (size_t i = 0; i<v.size; i++) {
+        if (strcmp(string, v.tokens[i])==0)
             return i;
     }
     return NOT_A_TOKEN;
 }
 
 
-Matrix tokenize(const char* string, const Vocab* v) {
+Matrix tokenize(const char* string, Vocab v) {
     size_t len = strlen(string);
     size_t* rle = malloc(sizeof(size_t) * len); // run length encoding
     for (size_t i=0;i<len;i++) {rle[i]=1;}
@@ -85,7 +85,7 @@ Matrix tokenize(const char* string, const Vocab* v) {
     return mat(b, 1, len);
 }
 
-char* detokenize(Matrix tokens, const Vocab* v) {
+char* detokenize(Matrix tokens, Vocab v) {
 #ifdef SAFETY
     if (tokens.rows != 1) {
         panic("Matrix must have 1 row in detokenize()\n");
@@ -95,7 +95,7 @@ char* detokenize(Matrix tokens, const Vocab* v) {
     result[0] = '\0';
     for (size_t i = 0; i < tokens.cols; i++) {
         size_t token_id = (size_t)*at(tokens, 0, i);
-        char* token_str = v->tokens[token_id];
+        char* token_str = v.tokens[token_id];
         strcat(result, token_str);
     }
     return result;

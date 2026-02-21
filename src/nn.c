@@ -37,7 +37,8 @@ Matrix embed(Matrix embeddings, Matrix tokens) {
     return m;
 }
 
-Matrix rope(Matrix x, int pos) {
+Matrix rope(Matrix x, LayerCache cache) {
+    // size_t pos = cache.k.cols - x.rows
     return x;
 }
 
@@ -59,7 +60,7 @@ Matrix rms_norm(Matrix x, Matrix weight) {
     return m;
 }
 
-Matrix engine_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache) {
+Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache) {
     // Decode-time GQA: single token, uses KV cache
     panic("Not implemented");
     return x;
@@ -83,7 +84,12 @@ Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCa
     assume_shape(Q, T, HIDDEN_SIZE);
     assume_shape(K, T, KV_SIZE);
     assume_shape(V, T, KV_SIZE);
+    assume_shape(cache.k, KV_SIZE, T);
+    assume_shape(cache.v, KV_SIZE, T);
 #endif
+
+    copy(transpose(K), slice(cache.k, 0, KV_SIZE, 0, T));
+    copy(transpose(V), slice(cache.v, 0, KV_SIZE, 0, T));
 
     Matrix O = empty(T, HIDDEN_SIZE);
     for (size_t qh = 0; qh < NUM_Q_HEADS; qh++) {

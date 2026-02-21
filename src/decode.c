@@ -1,12 +1,12 @@
-#include "engine.h"
+#include "decode.h"
 #include "model.h"
 #include "nn.h"
 #include "sample.h"
 #include "utils.h"
 
-Matrix engine_layer_fwd(Block b, Matrix x, int pos, LayerCache cache) {
+Matrix decode_layer_fwd(Block b, Matrix x, LayerCache cache) {
     Matrix attn_norm = rms_norm(x, b.attn_norm);
-    Matrix attn = engine_gqa(attn_norm, b.q, b.k, b.v, b.o, cache);
+    Matrix attn = decode_gqa(attn_norm, b.q, b.k, b.v, b.o, cache);
     free_mat(attn_norm);
     Matrix attn_out = add(x, attn);
     free_mat(attn);
@@ -22,7 +22,8 @@ Matrix engine_layer_fwd(Block b, Matrix x, int pos, LayerCache cache) {
 }
 
 
-Matrix fwd(SmolLM2 model, KVCache cache, size_t token_id, size_t pos) {
+Matrix fwd(SmolLM2* model, size_t token_id) {
+    increment_kv(model);
     not_implemented();
     Matrix m = {0};
     return m;

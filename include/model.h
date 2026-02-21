@@ -42,6 +42,8 @@ typedef struct {
 } SmolLM2;
 
 size_t size(LayerCache cache);
+void resize_kv(SmolLM2* model, size_t len);
+void increment_kv(SmolLM2* model);
 SmolLM2 load_model();
 void free_kvcache(KVCache cache);
 void free_model(SmolLM2 model);

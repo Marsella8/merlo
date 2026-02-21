@@ -12,7 +12,7 @@ void test_prefill() {
     Vocab vocab = load_vocab();
 
     const char* prompt = "Hello my name is";
-    Matrix tokens = tokenize(prompt, &vocab);
+    Matrix tokens = tokenize(prompt, vocab);
 
     prefill(&model, tokens);
 

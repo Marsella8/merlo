@@ -17,21 +17,21 @@ void test_tokenize_single_token() {
     {
         const char* input = "baa";
         int correct = 6; 
-        int output = tokenize_single_token((char*)input, &vocab);
+        int output = tokenize_single_token((char*)input, vocab);
         assert(output == correct);
     }
 
     {
         const char* input = "b";
         int correct = 1;
-        int output = tokenize_single_token((char*)input, &vocab);
+        int output = tokenize_single_token((char*)input, vocab);
         assert(output == correct);
     }
 
     {
         const char* input = "c";
         int correct = -1;
-        int output = tokenize_single_token((char*)input, &vocab);
+        int output = tokenize_single_token((char*)input, vocab);
         assert(output == correct);
     }
 }
@@ -43,7 +43,7 @@ void test_tokenize() {
         const char* input = "aaabbba";
         float correct_data[1][3] = {{6.0f, 3.0f, 4.0f}};
         Matrix correct = mat_from_array(1, 3, correct_data);
-        Matrix output = tokenize(input, &vocab);
+        Matrix output = tokenize(input, vocab);
 
         assert(eq(output, correct));
         
@@ -55,7 +55,7 @@ void test_tokenize() {
         const char* input = "ababa";
         float correct_data[1][3] = {{0.0f, 4.0f, 4.0f}};
         Matrix correct = mat_from_array(1, 3, correct_data);
-        Matrix output = tokenize(input, &vocab);
+        Matrix output = tokenize(input, vocab);
 
         assert(eq(output, correct));
 
@@ -67,7 +67,7 @@ void test_tokenize() {
         const char* input = "aaaaa";
         float correct_data[1][2] = {{2.0f, 6.0f}};
         Matrix correct = mat_from_array(1, 2, correct_data);
-        Matrix output = tokenize(input, &vocab);
+        Matrix output = tokenize(input, vocab);
 
         assert(eq(output, correct));
 
@@ -112,7 +112,7 @@ void test_tokenize_full() {
 
         Matrix correct = mat_from_array(1, 11, correct_data);
         
-        Matrix output = tokenize(input, &v);
+        Matrix output = tokenize(input, v);
         assert(eq(output, correct));
         free_mat(output);
         free_mat(correct);
@@ -127,7 +127,7 @@ void test_detokenize() {
     {
         float tokens_data[1][3] = {{8.0f, 3.0f, 4.0f}}; // "baa", "bb", "ba" -> "baabbba"
         Matrix tokens = mat_from_array(1, 3, tokens_data);
-        char* output = detokenize(tokens, &vocab);
+        char* output = detokenize(tokens, vocab);
         assert(strcmp(output, "baabbba") == 0);
         free(output);
         free_mat(tokens);
@@ -141,8 +141,8 @@ void test_detokenize_full() {
     {
         const char* input = "C and its consequences have been disastrous for the human race";
         // kinda not fully sound because tokenization is not bijective
-        Matrix tokens = tokenize(input, &v);
-        char* output = detokenize(tokens, &v);
+        Matrix tokens = tokenize(input, v);
+        char* output = detokenize(tokens, v);
         assert(strcmp(output, input) == 0);
         free(output);
         free_mat(tokens);
