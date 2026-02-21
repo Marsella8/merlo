@@ -19,9 +19,8 @@ Matrix elementwise(Matrix a, Matrix b);
 
 Matrix softmax(Matrix x);
 
-Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache);
+Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos);
 
-Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache);
+Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos);
 
 #endif // NN_H
-

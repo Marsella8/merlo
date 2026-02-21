@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "model.h"
 #include "matrix.h"
+#include "tokenizer.h"
 
 void test_embeddings_shape() {
     printf("  test_embeddings_shape\n");
@@ -9,7 +10,7 @@ void test_embeddings_shape() {
     
     assert(model.embeddings.rows == VOCAB_SIZE);
     assert(model.embeddings.cols == HIDDEN_SIZE);
-    
+    free_model(model);
 }
 
 void test_block_shapes() {
@@ -46,6 +47,7 @@ void test_block_shapes() {
         assert(block.down.rows == INTERMEDIATE_SIZE);
         assert(block.down.cols == HIDDEN_SIZE);
     }
+    free_model(model);
 }
 
 void test_final_norm_shape() {
@@ -54,6 +56,7 @@ void test_final_norm_shape() {
     
     assert(model.final_norm.rows == 1);
     assert(model.final_norm.cols == HIDDEN_SIZE);
+    free_model(model);
 }
 
 void test_lm_head_shape() {
@@ -62,6 +65,22 @@ void test_lm_head_shape() {
     
     assert(model.lm_head.rows == HIDDEN_SIZE);
     assert(model.lm_head.cols == VOCAB_SIZE);
+    free_model(model);
+}
+
+void test_prefill() {
+    printf("  test_prefill\n");
+    SmolLM2 model = load_model();
+    Vocab vocab = load_vocab();
+
+    const char* prompt = "Hello my name is";
+    Matrix tokens = tokenize(prompt, vocab);
+
+    prefill(model, tokens, 0);
+
+    free_mat(tokens);
+    free_model(model);
+    free_vocab(vocab);
 }
 
 int main() {
@@ -70,6 +89,6 @@ int main() {
     test_block_shapes();
     test_final_norm_shape();
     test_lm_head_shape();
+    test_prefill();
     return 0;
 }
-

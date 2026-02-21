@@ -9,8 +9,7 @@
 #include "matrix.h"
 
 Matrix silu(Matrix x) {
-    Buffer* b = buf(x.rows * x.cols * sizeof(float));
-    Matrix m = mat(b, x.rows, x.cols);
+    Matrix m = empty(x.rows, x.cols);
     
     for (size_t i = 0; i < x.rows; i++) {
         for (size_t j = 0; j < x.cols; j++) {
@@ -28,8 +27,7 @@ Matrix embed(Matrix embeddings, Matrix tokens) {
 #ifdef SAFETY
     assert(tokens.rows == 1);
 #endif
-    Buffer* b = buf(tokens.cols * embeddings.cols * sizeof(float));
-    Matrix m = mat(b, tokens.cols, embeddings.cols);
+    Matrix m = empty(tokens.cols, embeddings.cols);
     for (size_t i = 0; i < tokens.cols; i++) {
         size_t id = (size_t)*at(tokens, 0, i);
         memcpy(at(m, i, 0), at(embeddings, id, 0), embeddings.cols * sizeof(float));
@@ -55,8 +53,7 @@ Matrix rope(Matrix x, size_t pos) {
 }
 
 Matrix rms_norm(Matrix x, Matrix weight) {
-    Buffer* b = buf(x.rows * x.cols * sizeof(float));
-    Matrix m = mat(b, x.rows, x.cols);
+    Matrix m = empty(x.rows, x.cols);
     for (size_t i=0; i<x.rows; i++) {
         float rms = 0;
         for (size_t j=0; j<x.cols; j++) {
@@ -72,13 +69,13 @@ Matrix rms_norm(Matrix x, Matrix weight) {
     return m;
 }
 
-Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache) {
+Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos) {
     // Decode-time GQA: single token, uses KV cache
     panic("Not implemented");
     return x;
 }
 
-Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache) {
+Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos) {
     size_t T = x.rows;
 #ifdef SAFETY
     assume_shape(x, T, HIDDEN_SIZE);
@@ -92,8 +89,8 @@ Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCa
     Matrix K_proj = matmul(x, Wk);
     Matrix V = matmul(x, Wv);
 
-    Matrix Q = rope(Q_proj, 0);
-    Matrix K = rope(K_proj, 0);
+    Matrix Q = rope(Q_proj, pos);
+    Matrix K = rope(K_proj, pos);
     free_mat(Q_proj);
     free_mat(K_proj);
 
@@ -101,12 +98,14 @@ Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCa
     assume_shape(Q, T, HIDDEN_SIZE);
     assume_shape(K, T, KV_SIZE);
     assume_shape(V, T, KV_SIZE);
-    assume_shape(cache.k, KV_SIZE, T);
-    assume_shape(cache.v, KV_SIZE, T);
+    assume_shape(cache.k, KV_SIZE, -1);
+    assume_shape(cache.v, KV_SIZE, -1);
+    assert(pos + T <= cache.k.cols);
+    assert(pos + T <= cache.v.cols);
 #endif
 
-    copy(transpose(K), slice(cache.k, 0, KV_SIZE, 0, T));
-    copy(transpose(V), slice(cache.v, 0, KV_SIZE, 0, T));
+    copy(transpose(K), slice(cache.k, 0, KV_SIZE, pos, pos + T));
+    copy(transpose(V), slice(cache.v, 0, KV_SIZE, pos, pos + T));
 
     Matrix O = empty(T, HIDDEN_SIZE);
     for (size_t qh = 0; qh < NUM_Q_HEADS; qh++) {
@@ -137,9 +136,7 @@ Matrix elementwise(Matrix a, Matrix b) {
 #ifdef SAFETY
     assume_shape(a, b.rows, b.cols);
 #endif
-    
-    Buffer* buf_out = buf(a.rows * a.cols * sizeof(float));
-    Matrix m = mat(buf_out, a.rows, a.cols);
+    Matrix m = empty(a.rows, a.cols);
     
     for (size_t i = 0; i < a.rows; i++) {
         for (size_t j = 0; j < a.cols; j++) {

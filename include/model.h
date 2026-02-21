@@ -41,13 +41,12 @@ typedef struct {
     KVCache cache;
 } SmolLM2;
 
-size_t size(LayerCache cache);
-void resize_kv(SmolLM2* model, size_t len);
-void increment_kv(SmolLM2* model);
 SmolLM2 load_model();
 void free_kvcache(KVCache cache);
 void free_model(SmolLM2 model);
 Matrix load_matrix(const char* name, const int layer);
 QMatrix load_qmatrix(const char *name, const int layer);
+void prefill(SmolLM2 model, Matrix x, size_t pos);
+Matrix fwd(SmolLM2 model, size_t token_id, size_t pos);
 
 #endif // MODEL_H

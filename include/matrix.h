@@ -18,6 +18,7 @@ typedef struct {
     int row_stride;
     int col_stride;
     size_t offset;
+    bool owned;
 } Matrix;
 
 typedef struct {
@@ -28,6 +29,7 @@ typedef struct {
     int row_stride;
     int col_stride;
     size_t offset;
+    bool owned;
 } QMatrix;
 
 float* at_f32(Matrix mat, size_t r, size_t c);
@@ -41,6 +43,7 @@ int8_t* at_i8(QMatrix mat, size_t r, size_t c);
 Buffer* buf(size_t size);
 void free_buf(Buffer* b_ptr);
 void free_mat(Matrix m);
+void free_qmat(QMatrix q);
 Matrix mat(const Buffer* buffer, size_t rows, size_t cols);
 Matrix empty(size_t rows, size_t cols);
 Matrix mat_from_array(size_t rows, size_t cols, float m[rows][cols]);

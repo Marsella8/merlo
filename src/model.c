@@ -3,9 +3,12 @@
 #include <string.h>
 #include "matrix.h"
 #include "model.h"
+#include "nn.h"
+#include "utils.h"
 #include <stdint.h>
 
 const char* PATH = "model/";
+typedef Matrix (*AttnFn)(Matrix, Matrix, Matrix, Matrix, Matrix, LayerCache, size_t);
 
 static FILE* get_file(const char *name, const int layer) {
     char dest[256]; 
@@ -73,9 +76,7 @@ static KVCache init_kvcache() {
     KVCache cache = {0};
     for (size_t i = 0; i < NUM_LAYERS; i++) {
         cache.caches[i].k = empty(KV_SIZE, MAX_SEQ_LEN);
-        cache.caches[i].k.cols = 0;
         cache.caches[i].v = empty(KV_SIZE, MAX_SEQ_LEN);
-        cache.caches[i].v.cols = 0;
     }
     return cache;
 }
@@ -110,41 +111,54 @@ static void free_block(Block b) {
     free_mat(b.down);
 }
 
-void resize_kv(SmolLM2* model, size_t len) {
-    for (int l = 0; l < NUM_LAYERS; l++) {
-        model->cache.caches[l].k.cols = len;
-        model->cache.caches[l].v.cols = len;
+void free_model(SmolLM2 model) {
+    free_mat(model.lm_head);
+    for (int i = 0; i < NUM_LAYERS; i++) {
+        free_block(model.blocks[i]);
+    }
+    free_mat(model.final_norm);
+    free_kvcache(model.cache);
+}
+
+void free_kvcache(KVCache cache) {
+    for (int i = 0; i < NUM_LAYERS; i++) {
+        free_mat(cache.caches[i].k);
+        free_mat(cache.caches[i].v);
     }
 }
 
-void increment_kv(SmolLM2* model) {
-    for (int l = 0; l < NUM_LAYERS; l++) {
-        model->cache.caches[l].k.cols++;
-        model->cache.caches[l].v.cols++;
-    }
+static Matrix layer_fwd(Block b, Matrix x, LayerCache cache, size_t pos, AttnFn attn_fwd) {
+    Matrix attn_norm = rms_norm(x, b.attn_norm);
+    Matrix attn = attn_fwd(attn_norm, b.q, b.k, b.v, b.o, cache, pos);
+    free_mat(attn_norm);
+    Matrix attn_out = add(x, attn);
+    free_mat(attn);
+
+    Matrix ffn_norm = rms_norm(attn_out, b.ffn_norm);
+    Matrix ffnet = ffn(ffn_norm, b.gate, b.up, b.down);
+    free_mat(ffn_norm);
+    Matrix ffn_out = add(attn_out, ffnet);
+    free_mat(attn_out);
+    free_mat(ffnet);
+
+    return ffn_out;
 }
 
-size_t size(LayerCache cache) {
-    #ifdef SAFETY
-        assert(cache.k.rows == KV_SIZE);
-        assert(cache.v.rows == KV_SIZE);
-        assert(cache.k.cols == cache.v.cols);
-    #endif
-        return cache.k.cols;
+void prefill(SmolLM2 model, Matrix x, size_t pos) {
+    Matrix out = embed(model.embeddings, x);
+    for (int l = 0; l < NUM_LAYERS; l++) {
+        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], pos, prefill_gqa);
+        free_mat(out);
+        out = next;
     }
-    
-    void free_model(SmolLM2 model) {
-        free_mat(model.embeddings);
-        for (int i = 0; i < NUM_LAYERS; i++) {
-            free_block(model.blocks[i]);
-        }
-        free_mat(model.final_norm);
-        free_kvcache(model.cache);
-    }
-    
-    void free_kvcache(KVCache cache) {
-        for (int i = 0; i < NUM_LAYERS; i++) {
-            free_mat(cache.caches[i].k);
-            free_mat(cache.caches[i].v);
-        }
-    }
+    free_mat(out);
+}
+
+Matrix fwd(SmolLM2 model, size_t token_id, size_t pos) {
+    (void)model;
+    (void)token_id;
+    (void)pos;
+    not_implemented();
+    Matrix out = {0};
+    return out;
+}

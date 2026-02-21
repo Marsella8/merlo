@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "matrix.h"
+#include "utils.h"
 #include <stddef.h>
 
 float* at_f32(Matrix mat, size_t r, size_t c) {
@@ -34,9 +35,11 @@ int8_t* at_i8(QMatrix mat, size_t r, size_t c) {
 
 Buffer* buf(size_t size) {
     Buffer* b_ptr = malloc(sizeof(Buffer));
-    b_ptr->data = malloc(size);
 #ifdef SAFETY
     assert(b_ptr != NULL);
+#endif
+    b_ptr->data = malloc(size);
+#ifdef SAFETY
     assert(b_ptr->data != NULL);
 #endif
     b_ptr->size = size;
@@ -49,7 +52,30 @@ void free_buf(Buffer* b_ptr) {
 }
 
 void free_mat(Matrix m) {
+#ifdef SAFETY
+    if (m.buffer == NULL) {
+        panic("freeing NULL buffer? bro ...");
+    }
+    if (!m.owned) {
+        warning("freeing a non-owned matrix. remove this ...");
+        return;
+    }
+#endif
     free_buf(m.buffer);
+}
+
+void free_qmat(QMatrix q) {
+#ifdef SAFETY
+    if (q.weights == NULL || q.scales == NULL) {
+        panic("freeing NULL qmatrix buffers? bro ...");
+    }
+    if (!q.owned) {
+        warning("freeing a non-owned qmatrix. remove this ...");
+        return;
+    }
+#endif
+    free_buf(q.weights);
+    free_buf(q.scales);
 }
 
 Matrix mat(const Buffer* buffer, size_t rows, size_t cols) {
@@ -59,7 +85,8 @@ Matrix mat(const Buffer* buffer, size_t rows, size_t cols) {
         .cols = cols,
         .row_stride = cols,
         .col_stride = 1,
-        .offset = 0
+        .offset = 0,
+        .owned = true
     };
     return mat;
 }
@@ -109,7 +136,8 @@ Matrix transpose(Matrix mat) {
         .cols = mat.rows,
         .row_stride = mat.col_stride,
         .col_stride = mat.row_stride,
-        .offset = mat.offset
+        .offset = mat.offset,
+        .owned = false
     };
     return transposed;
 }
@@ -125,7 +153,8 @@ Matrix slice(Matrix mat, size_t r_start, size_t r_end, size_t c_start, size_t c_
         .cols = c_end - c_start,
         .row_stride = mat.row_stride,
         .col_stride = mat.col_stride,
-        .offset = mat.offset + r_start * mat.row_stride + c_start * mat.col_stride
+        .offset = mat.offset + r_start * mat.row_stride + c_start * mat.col_stride,
+        .owned = false
     };
     return s;
 }
@@ -134,17 +163,7 @@ Matrix add(Matrix a, Matrix b) {
 #ifdef SAFETY
     assume_shape(a, b.rows, b.cols);
 #endif
-    
-    size_t size = a.rows * a.cols * sizeof(float);
-    
-    Matrix result = {
-        .buffer = buf(size),
-        .rows = a.rows,
-        .cols = a.cols,
-        .row_stride = a.cols,
-        .col_stride = 1,
-        .offset = 0
-    };
+    Matrix result = empty(a.rows, a.cols);
 
     for (size_t r = 0; r < a.rows; r++) {
         for (size_t c = 0; c < a.cols; c++) {
@@ -159,17 +178,7 @@ Matrix matmul(Matrix a, Matrix b) {
 #ifdef SAFETY
     assert(a.cols == b.rows);
 #endif
-    
-    size_t size = a.rows * b.cols * sizeof(float);
-    
-    Matrix result = {
-        .buffer = buf(size),
-        .rows = a.rows,
-        .cols = b.cols,
-        .row_stride = b.cols,
-        .col_stride = 1,
-        .offset = 0
-    };
+    Matrix result = empty(a.rows, b.cols);
     
     for (size_t i = 0; i < a.rows; i++) {
         for (size_t j = 0; j < b.cols; j++) {
@@ -185,36 +194,24 @@ Matrix matmul(Matrix a, Matrix b) {
 }
 
 Matrix masked_matmul(Matrix a, Matrix b) {
-    #ifdef SAFETY
-        assert(a.cols == b.rows);
-    #endif
-        
-        size_t size = a.rows * b.cols * sizeof(float);
-        
-        Matrix result = {
-            .buffer = buf(size),
-            .rows = a.rows,
-            .cols = b.cols,
-            .row_stride = b.cols,
-            .col_stride = 1,
-            .offset = 0
-        };
-        
-        for (size_t i = 0; i < a.rows; i++) {
-            for (size_t j = 0; j <= i; j++) {
-                float sum = 0.0f;
-                for (size_t k = 0; k < a.cols; k++) {
-                    sum += *at(a, i, k) * *at(b, k, j);
-                }
-                *at(result, i, j) = sum;
+ #ifdef SAFETY
+    assert(a.cols == b.rows);
+ #endif
+    Matrix result = empty(a.rows, b.cols);
+    for (size_t i = 0; i < a.rows; i++) {
+        for (size_t j = 0; j <= i; j++) {
+            float sum = 0.0f;
+            for (size_t k = 0; k < a.cols; k++) {
+                sum += *at(a, i, k) * *at(b, k, j);
             }
-            for (size_t j = i + 1; j < b.cols; j++) {
-                *at(result, i, j) = 0.0f;
-            }
+            *at(result, i, j) = sum;
         }
-        
-        return result;
+        for (size_t j = i + 1; j < b.cols; j++) {
+            *at(result, i, j) = 0.0f;
+        }
     }
+    return result;
+}
 
 Matrix qmatmul(Matrix a, QMatrix b) {
     //TODO: make more performant by doing it directly
@@ -225,9 +222,8 @@ Matrix qmatmul(Matrix a, QMatrix b) {
 }
 
 Matrix dequantize(QMatrix q) {
-    size_t numel = q.rows * q.cols;
-    Buffer* b = buf(numel * sizeof(float));
-    float* out = (float*)b->data;
+    Matrix out_m = empty(q.rows, q.cols);
+    float* out = (float*)out_m.buffer->data;
     int8_t* weights = (int8_t*)q.weights->data;
     float* scales = (float*)q.scales->data;
 
@@ -242,7 +238,7 @@ Matrix dequantize(QMatrix q) {
             out[dst_idx] = scale * weights[src_idx];
         }
     }
-    return mat(b, q.rows, q.cols);
+    return out_m;
 }
 
 QMatrix qmat(const Buffer* weights, const Buffer* scales, size_t rows, size_t cols) {
@@ -253,7 +249,8 @@ QMatrix qmat(const Buffer* weights, const Buffer* scales, size_t rows, size_t co
         .cols = cols,
         .row_stride = cols,
         .col_stride = 1,
-        .offset = 0
+        .offset = 0,
+        .owned = true
     };
     return q;
 }
@@ -266,7 +263,8 @@ QMatrix qtranspose(QMatrix q) {
         .cols = q.rows,
         .row_stride = q.col_stride,
         .col_stride = q.row_stride,
-        .offset = q.offset
+        .offset = q.offset,
+        .owned = false
     };
     
     return transposed;

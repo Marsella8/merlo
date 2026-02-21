@@ -1,7 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DSAFETY
+CFLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DSAFETY -lm
 # Otherwise the stack gets smashed uhhhh
-LDFLAGS = -Wl,-z,stack-size=1073741824 -lm
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -42,7 +41,7 @@ test: $(TEST_BINS)
 	done
 
 $(BUILD_DIR)/test_%: $(TEST_DIR)/%.c $(OBJS_NO_MAIN) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $< $(OBJS_NO_MAIN) -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $< $(OBJS_NO_MAIN) -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)

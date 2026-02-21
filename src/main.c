@@ -2,8 +2,6 @@
 #include <string.h>
 #include "model.h"
 #include "tokenizer.h"
-#include "prefill.h"
-#include "decode.h"
 #include "sample.h"
 
 int main() {
@@ -11,11 +9,11 @@ int main() {
     SmolLM2 model = load_model();
     Vocab vocab = load_vocab();
     Matrix tokens = tokenize(prompt, vocab);
-    prefill(&model, tokens);
+    prefill(model, tokens, 0);
     printf("%s", prompt);
-    for (int pos = tokens.cols; pos < MAX_SEQ_LEN; pos++) {
-        size_t last_token_id = (size_t)*at(tokens, 0, tokens.cols - 1);
-        Matrix logits = fwd(&model, last_token_id);
+    for (size_t pos = tokens.cols; pos < MAX_SEQ_LEN; pos++) {
+        size_t last_token_id = (size_t)*at(tokens, 0, pos - 1);
+        Matrix logits = fwd(model, last_token_id, pos);
         size_t token = argmax(logits);
         char* str = vocab.tokens[token];
         printf("%s", str);
