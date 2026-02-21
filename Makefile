@@ -12,10 +12,13 @@ OBJS_NO_MAIN = $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
 
 TEST_SRCS = $(wildcard $(TEST_DIR)/*.c)
 TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=$(BUILD_DIR)/test_%)
+MAIN_BIN = $(BUILD_DIR)/main
 
-.PHONY: all clean test lint debug
+.PHONY: all main clean test lint debug
 
-all: $(BUILD_DIR) $(OBJS) $(TEST_BINS)
+all: $(BUILD_DIR) $(OBJS) $(MAIN_BIN) $(TEST_BINS)
+
+main: $(MAIN_BIN)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -42,6 +45,9 @@ test: $(TEST_BINS)
 
 $(BUILD_DIR)/test_%: $(TEST_DIR)/%.c $(OBJS_NO_MAIN) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $< $(OBJS_NO_MAIN) -o $@
+
+$(MAIN_BIN): $(OBJS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(OBJS) -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)

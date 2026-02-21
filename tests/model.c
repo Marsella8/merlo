@@ -83,6 +83,27 @@ void test_prefill() {
     free_vocab(vocab);
 }
 
+void test_decode() {
+    printf("  test_decode\n");
+    SmolLM2 model = load_model();
+    Vocab vocab = load_vocab();
+
+    const char* prompt = "Hello my name is";
+    Matrix tokens = tokenize(prompt, vocab);
+    prefill(model, tokens, 0);
+
+    size_t decode_pos = tokens.cols;
+    size_t token_id = (size_t)*at(tokens, 0, tokens.cols - 1);
+    Matrix logits = fwd(model, token_id, decode_pos);
+    assert(logits.rows == 1);
+    assert(logits.cols == VOCAB_SIZE);
+
+    free_mat(logits);
+    free_mat(tokens);
+    free_model(model);
+    free_vocab(vocab);
+}
+
 int main() {
     printf("model tests:\n");
     test_embeddings_shape();
@@ -90,5 +111,6 @@ int main() {
     test_final_norm_shape();
     test_lm_head_shape();
     test_prefill();
+    test_decode();
     return 0;
 }

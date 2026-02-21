@@ -155,10 +155,21 @@ void prefill(SmolLM2 model, Matrix x, size_t pos) {
 }
 
 Matrix fwd(SmolLM2 model, size_t token_id, size_t pos) {
-    (void)model;
-    (void)token_id;
-    (void)pos;
-    not_implemented();
-    Matrix out = {0};
-    return out;
+    Matrix token = empty(1, 1);
+    *at(token, 0, 0) = (float)token_id;
+
+    Matrix out = embed(model.embeddings, token);
+    free_mat(token);
+
+    for (int l = 0; l < NUM_LAYERS; l++) {
+        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], pos, prefill_gqa);
+        free_mat(out);
+        out = next;
+    }
+
+    Matrix normed = rms_norm(out, model.final_norm);
+    Matrix logits = matmul(normed, model.lm_head);
+    free_mat(out);
+    free_mat(normed);
+    return logits;
 }
