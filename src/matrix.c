@@ -33,6 +33,20 @@ int8_t* at_i8(QMatrix mat, size_t r, size_t c) {
     return &((int8_t*)mat.weights->data)[start];
 }
 
+static inline bool is_contiguous(Matrix m) {
+    return m.row_stride >= 0 && m.col_stride == 1 && (size_t)m.row_stride == m.cols;
+}
+
+static inline float* as_ptr(Matrix mat) {
+#ifdef SAFETY
+    if (mat.buffer == NULL) {
+        panic("as_ptr called on NULL matrix buffer");
+    }
+    assert(is_contiguous(mat));
+#endif
+    return &((float*)mat.buffer->data)[mat.offset];
+}
+
 Buffer* buf(size_t size) {
     Buffer* b_ptr = malloc(sizeof(Buffer));
 #ifdef SAFETY
@@ -128,7 +142,6 @@ void copy(Matrix src, Matrix dst) {
     }
 }
 
-
 Matrix transpose(Matrix mat) {
     Matrix transposed = {
         .buffer = mat.buffer,
@@ -179,7 +192,24 @@ Matrix matmul(Matrix a, Matrix b) {
     assert(a.cols == b.rows);
 #endif
     Matrix result = empty(a.rows, b.cols);
-    
+
+    if (is_contiguous(a) && is_contiguous(b)) {
+        const float* a_data = as_ptr(a);
+        const float* b_data = as_ptr(b);
+        float* out_data = as_ptr(result);
+
+        for (size_t i = 0; i < a.rows; i++) {
+            for (size_t j = 0; j < b.cols; j++) {
+                float sum = 0.0f;
+                for (size_t k = 0; k < a.cols; k++) {
+                    sum += a_data[i * a.cols + k] * b_data[k * b.cols + j];
+                }
+                out_data[i * b.cols + j] = sum;
+            }
+        }
+        return result;
+    }
+
     for (size_t i = 0; i < a.rows; i++) {
         for (size_t j = 0; j < b.cols; j++) {
             float sum = 0.0f;
