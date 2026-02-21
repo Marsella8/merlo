@@ -77,7 +77,11 @@ Matrix tokenize(const char* string, Vocab v) {
     size_t current_offset = 0;
     for (size_t i = 0; i < len; i++) {
         char* token_str = substr(string, current_offset, current_offset + rle[i]);
-        data[i] = (float)tokenize_single_token(token_str, v); // should really be an int
+        int token_id = tokenize_single_token(token_str, v);
+#ifdef SAFETY
+        assert(token_id != NOT_A_TOKEN);
+#endif
+        data[i] = (float)token_id; // should really be an int
         current_offset += rle[i];
         free(token_str);
     }

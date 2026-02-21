@@ -144,10 +144,15 @@ static Matrix layer_fwd(Block b, Matrix x, LayerCache cache, size_t pos, AttnFn 
     return ffn_out;
 }
 
-void prefill(SmolLM2 model, Matrix x, size_t pos) {
+static Matrix prefill_from_zero(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos) {
+    (void)pos;
+    return prefill_gqa(x, Wq, Wk, Wv, Wo, cache);
+}
+
+void prefill(SmolLM2 model, Matrix x) {
     Matrix out = embed(model.embeddings, x);
     for (int l = 0; l < NUM_LAYERS; l++) {
-        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], pos, prefill_gqa);
+        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], 0, prefill_from_zero);
         free_mat(out);
         out = next;
     }
@@ -162,7 +167,7 @@ Matrix fwd(SmolLM2 model, size_t token_id, size_t pos) {
     free_mat(token);
 
     for (int l = 0; l < NUM_LAYERS; l++) {
-        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], pos, prefill_gqa);
+        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], pos, decode_gqa);
         free_mat(out);
         out = next;
     }

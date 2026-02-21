@@ -76,7 +76,7 @@ void test_prefill() {
     const char* prompt = "Hello my name is";
     Matrix tokens = tokenize(prompt, vocab);
 
-    prefill(model, tokens, 0);
+    prefill(model, tokens);
 
     free_mat(tokens);
     free_model(model);
@@ -90,7 +90,7 @@ void test_decode() {
 
     const char* prompt = "Hello my name is";
     Matrix tokens = tokenize(prompt, vocab);
-    prefill(model, tokens, 0);
+    prefill(model, tokens);
 
     size_t decode_pos = tokens.cols;
     size_t token_id = (size_t)*at(tokens, 0, tokens.cols - 1);
