@@ -18,8 +18,8 @@ int main() {
         char* str = vocab.tokens[token];
         printf("%s", str);
         fflush(stdout);
-        free_mat(logits);
         last_token_id = token;
+        free_mat(logits);
     }
 
     free_model(model);

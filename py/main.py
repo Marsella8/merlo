@@ -3,112 +3,95 @@ import struct
 import numpy as np
 from pathlib import Path
 from huggingface_hub import hf_hub_download
-from gguf import GGUFReader
-from transformers import AutoTokenizer
-from libellula import batch
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-def bytes_to_unicode():
-    bs = list(range(ord("!"), ord("~")+1)) + list(range(ord("¡"), ord("¬")+1)) + list(range(ord("®"), ord("ÿ")+1))
-    cs = bs[:]
-    n = 0
-    for b in range(256):
-        if b not in bs:
-            bs.append(b)
-            cs.append(256 + n)
-            n += 1
-    return dict(zip(bs, [chr(c) for c in cs]))
-
-REPO_ID = "QuantFactory/SmolLM2-135M-GGUF"
-FILENAME = "SmolLM2-135M.Q8_0.gguf"
+MODEL_BF16 = "HuggingFaceTB/SmolLM2-135M-Instruct"
+MODEL_INT8 = "onnx/model_int8.onnx"
 MODEL_DIR = Path(__file__).parent.parent / "model"
 MODEL_DIR.mkdir(exist_ok=True)
-MODEL_PATH = MODEL_DIR / FILENAME
 VOCAB_PATH = MODEL_DIR / "vocab.txt"
 
-def cleanup_name(name):
-    return name.removeprefix("blk.").removesuffix(".weight")
-
 def save_tokenizer():
-    byte_decoder = {v: k for k, v in bytes_to_unicode().items()}
+    def bytes_to_unicode():
+        bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+        cs = bs[:]
+        n = 0
+        for b in range(256):
+            if b not in bs:
+                bs.append(b)
+                cs.append(256 + n)
+                n += 1
+        return dict(zip(bs, [chr(c) for c in cs]))
 
-    tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+    byte_decoder = {v: k for k, v in bytes_to_unicode().items()}
+    tok = AutoTokenizer.from_pretrained(MODEL_BF16)
     vocab = tok.get_vocab()
     sorted_vocab = sorted(vocab.items(), key=lambda x: x[1])
-    
+
     with open(VOCAB_PATH, "wb") as f:
-        for token, token_id in sorted_vocab:
+        for token, _ in sorted_vocab:
             if token in tok.all_special_tokens:
-                token_bytes = token.encode('utf-8')
+                token_bytes = token.encode("utf-8")
             else:
                 token_bytes = bytes([byte_decoder[c] for c in token])
             assert len(token_bytes) <= 256
-            padded = token_bytes.ljust(256, b'\0')
-            f.write(padded)
-    print(f"Saved tokenizer")
+            f.write(token_bytes.ljust(256, b"\0"))
+    print("Saved tokenizer")
 
-def sample_tokenized_text():
-    tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
-    text = "C and its consequences have been disastrous for the human race"
-    tokenized = tok.encode(text)
-    print(tokenized)
-    print([tok.decode([token]) for token in tokenized])
+def save_fp32():
+    def to_fp32_numpy(tensor):
+        # BF16 tensors cannot always be exported directly with .numpy().
+        return tensor.detach().to(torch.float32).cpu().numpy()
 
-def save_fp32(tensor):
-    r = 1
-    c = tensor.shape[0]
-    data = tensor.data.tobytes()
-    assert len(data) == 4 * r * c
-    with open(MODEL_DIR / cleanup_name(tensor.name), "wb") as f:
-        f.write(struct.pack('QQ', r, c) + data)
-    filesize = os.path.getsize(MODEL_DIR / cleanup_name(tensor.name))
-    assert filesize == 16 + len(data)
+    def save_fp32_array(name, array):
+        arr = np.asarray(array, dtype=np.float32)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, arr.shape[0])
+        elif arr.ndim != 2:
+            raise ValueError(f"Expected 1D or 2D array for {name}, got {arr.ndim}D")
+        arr = np.ascontiguousarray(arr)
 
-def save_q8_0(tensor):
-    rows, cols = tensor.shape
-    data_bytes = tensor.data.tobytes()
-    
-    scales = []
-    weights = []
-    
-    # GGUF Q8_0 block size is 34 bytes: 2 bytes for half-float scale, 32 bytes for int8 weights
-    for block in batch(data_bytes, 34):
-        # 'e' is half-precision float (16-bit)
-        scale = struct.unpack('e', bytes(block[:2]))[0]
-        scales.append(scale)
-        
-        int8_values = struct.unpack('32b', bytes(block[2:34]))
-        weights.extend(int8_values)
-    
-    scales_array = np.array(scales, dtype=np.float32)
-    weights_array = np.array(weights, dtype=np.int8)
-    
-    with open(MODEL_DIR / cleanup_name(tensor.name), "wb") as f:
-        f.write(struct.pack('QQ', rows, cols))
-        scales_array.tofile(f)
-        weights_array.tofile(f)
-    
-    expected_size = 16 + (rows * cols // 32) * 4 + rows * cols
-    assert os.path.getsize(MODEL_DIR / cleanup_name(tensor.name)) == expected_size
+        rows, cols = arr.shape
+        path = MODEL_DIR / name
+        with open(path, "wb") as f:
+            f.write(struct.pack("QQ", rows, cols))
+            arr.tofile(f)
+        assert os.path.getsize(path) == 16 + rows * cols * 4
 
-def download_and_convert():
-    model_path = hf_hub_download(
-        repo_id=REPO_ID,
-        filename=FILENAME,
-        local_dir=str(MODEL_DIR)
+    def export_state_dict_to_c_format(state_dict, num_layers):
+        # model.c expects token_embd as [hidden, vocab], then transposes at load time.
+        save_fp32_array("token_embd", to_fp32_numpy(state_dict["model.embed_tokens.weight"].T))
+        save_fp32_array("output_norm", to_fp32_numpy(state_dict["model.norm.weight"]))
+
+        for layer in range(num_layers):
+            prefix = f"model.layers.{layer}"
+            save_fp32_array(f"{layer}.attn_norm", to_fp32_numpy(state_dict[f"{prefix}.input_layernorm.weight"]))
+            save_fp32_array(f"{layer}.attn_q", to_fp32_numpy(state_dict[f"{prefix}.self_attn.q_proj.weight"].T))
+            save_fp32_array(f"{layer}.attn_k", to_fp32_numpy(state_dict[f"{prefix}.self_attn.k_proj.weight"].T))
+            save_fp32_array(f"{layer}.attn_v", to_fp32_numpy(state_dict[f"{prefix}.self_attn.v_proj.weight"].T))
+            save_fp32_array(f"{layer}.attn_output", to_fp32_numpy(state_dict[f"{prefix}.self_attn.o_proj.weight"].T))
+            save_fp32_array(f"{layer}.ffn_norm", to_fp32_numpy(state_dict[f"{prefix}.post_attention_layernorm.weight"]))
+            save_fp32_array(f"{layer}.ffn_gate", to_fp32_numpy(state_dict[f"{prefix}.mlp.gate_proj.weight"].T))
+            save_fp32_array(f"{layer}.ffn_up", to_fp32_numpy(state_dict[f"{prefix}.mlp.up_proj.weight"].T))
+            save_fp32_array(f"{layer}.ffn_down", to_fp32_numpy(state_dict[f"{prefix}.mlp.down_proj.weight"].T))
+
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_BF16,
+        dtype=torch.bfloat16,
+        device_map="cpu",
     )
-    print(f"Downloaded to: {model_path}")
-    
-    reader = GGUFReader(model_path)
-    for tensor in reader.tensors:
-        print(f"Processing {tensor.name} ({tensor.tensor_type})...")
-        match tensor.tensor_type:
-            case 0: # GGML_TYPE_F32
-                save_fp32(tensor)
-            case 8: # GGML_TYPE_Q8_0
-                save_q8_0(tensor)
-            case _:
-                print(f"Skipping unsupported tensor type: {tensor.tensor_type}")
+    export_state_dict_to_c_format(model.state_dict(), model.config.num_hidden_layers)
+    print("Saved MODEL_BF16 weights in model.c format (fp32 files)")
+
+def save_q8_0():
+    model_path = hf_hub_download(
+        repo_id=MODEL_BF16,
+        filename=MODEL_INT8,
+        local_dir=str(MODEL_DIR),
+    )
+    print(f"Saved MODEL_INT8 to: {model_path}")
 
 if __name__ == "__main__":
     save_tokenizer()
-    # sample_tokenized_text()
+    save_fp32()

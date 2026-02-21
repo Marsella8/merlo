@@ -102,13 +102,16 @@ Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCac
     copy(transpose(v), slice(cache.v, 0, KV_SIZE, pos, pos + 1));
 
     Matrix O = empty(1, HIDDEN_SIZE);
+    const float attn_scale = 1.0f / sqrtf((float)HEAD_DIM);
     for (size_t qh = 0; qh < NUM_Q_HEADS; qh++) {
         size_t kvh = qh / (NUM_Q_HEADS / NUM_KV_HEADS);
         Matrix Qh = slice(q, 0, 1, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
         Matrix Kh = slice(cache.k, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
         Matrix Vh = slice(cache.v, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
-        Matrix scores = matmul(Qh, Kh); // 1 x T
+        Matrix raw_scores = matmul(Qh, Kh); // 1 x T
+        Matrix scores = scale(raw_scores, attn_scale);
         Matrix attn = softmax(scores);
+        free_mat(raw_scores);
         Matrix Hh = matmul(attn, transpose(Vh)); // 1 x HEAD_DIM
         Matrix out_h = slice(O, 0, 1, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
         copy(Hh, out_h);
@@ -159,13 +162,16 @@ Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCa
     copy(transpose(V), slice(cache.v, 0, KV_SIZE, 0, T));
 
     Matrix O = empty(T, HIDDEN_SIZE);
+    const float attn_scale = 1.0f / sqrtf((float)HEAD_DIM);
     for (size_t qh = 0; qh < NUM_Q_HEADS; qh++) {
         size_t kvh = qh / (NUM_Q_HEADS / NUM_KV_HEADS);
         Matrix Qh = slice(Q, 0, T, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
         Matrix Kh = slice(cache.k, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
         Matrix Vh = slice(cache.v, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
-        Matrix scores = masked_matmul(Qh, Kh); // T x T (causal)
+        Matrix raw_scores = masked_matmul(Qh, Kh); // T x T (causal)
+        Matrix scores = scale(raw_scores, attn_scale);
         Matrix attn = softmax(scores);
+        free_mat(raw_scores);
         Matrix Hh = matmul(attn, transpose(Vh)); // T x HEAD_DIM
         Matrix out_h = slice(O, 0, T, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
         copy(Hh, out_h);

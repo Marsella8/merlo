@@ -26,14 +26,17 @@ Matrix load_matrix(const char* name, const int layer) {
     FILE* file =  get_file(name, layer);
     
     size_t row, col;
-    fread(&row, sizeof(size_t), 1, file);
-    fread(&col, sizeof(size_t), 1, file);
+    size_t row_read = fread(&row, sizeof(size_t), 1, file);
+    size_t col_read = fread(&col, sizeof(size_t), 1, file);
+#ifdef SAFETY
+    assert(row_read == 1);
+    assert(col_read == 1);
+#endif
     
     size_t numel = row * col;
     Buffer* buffer = buf(numel * sizeof(float));
     fread(buffer->data, sizeof(float), numel, file);
     fclose(file);
-    
     return mat(buffer, row, col);
 }
 
@@ -41,17 +44,28 @@ QMatrix load_qmatrix(const char *name, const int layer) {
     FILE* file =  get_file(name, layer);
     
     size_t row, col;
-    fread(&row, sizeof(size_t), 1, file);
-    fread(&col, sizeof(size_t), 1, file);
+    size_t row_read = fread(&row, sizeof(size_t), 1, file);
+    size_t col_read = fread(&col, sizeof(size_t), 1, file);
+#ifdef SAFETY
+    assert(row_read == 1);
+    assert(col_read == 1);
+    assert(row % 32 == 0);
+#endif
     
     size_t numel = row * col;
     size_t num_blocks = numel / 32;
     
     Buffer* scales = buf(num_blocks * sizeof(float));
-    fread(scales->data, sizeof(float), num_blocks, file);
+    size_t scales_read = fread(scales->data, sizeof(float), num_blocks, file);
+#ifdef SAFETY
+    assert(scales_read == num_blocks);
+#endif
     
     Buffer* weights = buf(numel * sizeof(int8_t));
-    fread(weights->data, sizeof(int8_t), numel, file);
+    size_t weights_read = fread(weights->data, sizeof(int8_t), numel, file);
+#ifdef SAFETY
+    assert(weights_read == numel);
+#endif
     
     fclose(file);
     

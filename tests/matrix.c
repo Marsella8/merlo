@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <math.h>
 #include "matrix.h"
 
 float m[2][3] = {
@@ -141,23 +142,22 @@ void test_masked_matmul() {
         {0.0f, 1.0f, 0.0f},
         {0.0f, 0.0f, 1.0f}
     };
-    float correct_data[3][3] = {
-        {1.0f, 0.0f, 0.0f},
-        {4.0f, 5.0f, 0.0f},
-        {7.0f, 8.0f, 9.0f}
-    };
-
     Matrix a = mat_from_array(3, 3, a_data);
     Matrix b = mat_from_array(3, 3, b_data);
     Matrix result = masked_matmul(a, b);
-    Matrix correct = mat_from_array(3, 3, correct_data);
-
-    assert(eq(result, correct));
+    assert(*at(result, 0, 0) == 1.0f);
+    assert(isinf(*at(result, 0, 1)) && *at(result, 0, 1) < 0.0f);
+    assert(isinf(*at(result, 0, 2)) && *at(result, 0, 2) < 0.0f);
+    assert(*at(result, 1, 0) == 4.0f);
+    assert(*at(result, 1, 1) == 5.0f);
+    assert(isinf(*at(result, 1, 2)) && *at(result, 1, 2) < 0.0f);
+    assert(*at(result, 2, 0) == 7.0f);
+    assert(*at(result, 2, 1) == 8.0f);
+    assert(*at(result, 2, 2) == 9.0f);
 
     free_mat(a);
     free_mat(b);
     free_mat(result);
-    free_mat(correct);
 }
 
 

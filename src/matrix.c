@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 #include "matrix.h"
 #include "utils.h"
 #include <stddef.h>
@@ -187,6 +188,16 @@ Matrix add(Matrix a, Matrix b) {
     return result;
 }
 
+Matrix scale(Matrix a, float value) {
+    Matrix result = empty(a.rows, a.cols);
+    for (size_t r = 0; r < a.rows; r++) {
+        for (size_t c = 0; c < a.cols; c++) {
+            *at(result, r, c) = *at(a, r, c) * value;
+        }
+    }
+    return result;
+}
+
 Matrix matmul(Matrix a, Matrix b) {
 #ifdef SAFETY
     assert(a.cols == b.rows);
@@ -237,7 +248,7 @@ Matrix masked_matmul(Matrix a, Matrix b) {
             *at(result, i, j) = sum;
         }
         for (size_t j = i + 1; j < b.cols; j++) {
-            *at(result, i, j) = 0.0f;
+            *at(result, i, j) = -INFINITY;
         }
     }
     return result;
@@ -298,13 +309,4 @@ QMatrix qtranspose(QMatrix q) {
     };
     
     return transposed;
-}
-
-void assume_non_nans(Matrix m) {
-    float nan = 0.0f / 0.0f;
-    for (size_t i = 0; i < m.rows; i++) {
-        for (size_t j = 0; j < m.cols; j++) {
-            assert(*at(m, i, j) != nan);
-        }
-    }
 }

@@ -50,6 +50,7 @@ Matrix mat_from_array(size_t rows, size_t cols, float m[rows][cols]);
 Matrix transpose(Matrix mat);
 Matrix slice(Matrix mat, size_t r_start, size_t r_end, size_t c_start, size_t c_end);
 Matrix add(Matrix a, Matrix b);
+Matrix scale(Matrix a, float value);
 Matrix matmul(Matrix a, Matrix b);
 Matrix masked_matmul(Matrix a, Matrix b);
 Matrix qmatmul(Matrix a, QMatrix b);
@@ -59,7 +60,6 @@ QMatrix qtranspose(QMatrix q);
 Matrix dequantize(QMatrix q);
 QMatrix qmat(const Buffer* weights, const Buffer* scales, size_t rows, size_t cols);
 
-void assume_non_nans(Matrix m);
 #define assume_shape(m, r, c) assert(((int)(r) == -1 || (m).rows == (size_t)(r)) && ((int)(c) == -1 || (m).cols == (size_t)(c)))
 
 #endif // MATRIX_H
