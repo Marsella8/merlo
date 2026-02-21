@@ -59,6 +59,7 @@ QMatrix qtranspose(QMatrix q);
 Matrix dequantize(QMatrix q);
 QMatrix qmat(const Buffer* weights, const Buffer* scales, size_t rows, size_t cols);
 
+void assume_non_nans(Matrix m);
 #define assume_shape(m, r, c) assert(((int)(r) == -1 || (m).rows == (size_t)(r)) && ((int)(c) == -1 || (m).cols == (size_t)(c)))
 
 #endif // MATRIX_H

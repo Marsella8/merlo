@@ -44,6 +44,9 @@ int tokenize_single_token(char* string, Vocab v) {
 
 
 Matrix tokenize(const char* string, Vocab v) {
+#ifdef SAFETY
+    assert(string != NULL && strlen(string) > 0);
+#endif
     size_t len = strlen(string);
     size_t* rle = malloc(sizeof(size_t) * len); // run length encoding
     for (size_t i=0;i<len;i++) {rle[i]=1;}
@@ -72,7 +75,7 @@ Matrix tokenize(const char* string, Vocab v) {
         len--;
         memmove(rle + pos + 1, rle + pos + 2, (len - pos - 1) * sizeof(size_t));
     }
-    Buffer* b = buf(len * sizeof(size_t));
+    Buffer* b = buf(len * sizeof(float));
     float* data = (float*)b->data;
     size_t current_offset = 0;
     for (size_t i = 0; i < len; i++) {
@@ -98,7 +101,15 @@ char* detokenize(Matrix tokens, Vocab v) {
     char* result = malloc(tokens.cols * 256);
     result[0] = '\0';
     for (size_t i = 0; i < tokens.cols; i++) {
-        size_t token_id = (size_t)*at(tokens, 0, i);
+        float token = *at(tokens, 0, i);
+#ifdef SAFETY
+        assert(token >= 0.0f);
+        size_t token_id = (size_t)token;
+        assert((float)token_id == token);
+        assert(token_id < v.size);
+#else
+        size_t token_id = (size_t)token;
+#endif
         char* token_str = v.tokens[token_id];
         strcat(result, token_str);
     }

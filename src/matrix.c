@@ -299,3 +299,12 @@ QMatrix qtranspose(QMatrix q) {
     
     return transposed;
 }
+
+void assume_non_nans(Matrix m) {
+    float nan = 0.0f / 0.0f;
+    for (size_t i = 0; i < m.rows; i++) {
+        for (size_t j = 0; j < m.cols; j++) {
+            assert(*at(m, i, j) != nan);
+        }
+    }
+}

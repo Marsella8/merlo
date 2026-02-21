@@ -16,7 +16,7 @@ void test_tokenize_single_token() {
     
     {
         const char* input = "baa";
-        int correct = 6; 
+        int correct = 8;
         int output = tokenize_single_token((char*)input, vocab);
         assert(output == correct);
     }
@@ -153,6 +153,7 @@ void test_detokenize_full() {
 
 int main() {
     printf("tokenizer tests:\n");
+    test_tokenize_single_token();
     test_tokenize();
     test_detokenize();
     test_load_vocab();
