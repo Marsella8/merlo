@@ -1,5 +1,8 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable -Iinclude -lm
+CFLAGS_COMMON = -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable -Iinclude -lm
+CFLAGS_RELEASE = $(CFLAGS_COMMON) -O3
+CFLAGS_DEBUG = $(CFLAGS_COMMON) -g -O0 -DSAFETY
+CFLAGS ?= $(CFLAGS_RELEASE)
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -12,12 +15,12 @@ OBJS_NO_MAIN = $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
 TEST_SRCS = $(wildcard $(TEST_DIR)/*.c)
 TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=$(BUILD_DIR)/test_%)
 MAIN_BIN = $(BUILD_DIR)/main
+PERF ?= perf
+ARGS ?=
 
-.PHONY: all main clean test lint debug
+.PHONY: all clean test lint release debug perf
 
 all: $(BUILD_DIR) $(OBJS) $(MAIN_BIN) $(TEST_BINS)
-
-main: $(MAIN_BIN)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -28,8 +31,14 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 lint:
 	clang-tidy $(SRCS) -- $(CFLAGS)
 
-debug: CFLAGS += -g -O0 -DSAFETY
+release: CFLAGS = $(CFLAGS_RELEASE)
+release: clean all
+
+debug: CFLAGS = $(CFLAGS_DEBUG)
 debug: clean all
+
+perf: release
+	$(PERF) record -g -m 64 -o perf.data -- $(MAIN_BIN) $(ARGS) && $(PERF) report --stdio --no-children --percent-limit 1 -i perf.data
 
 test: $(TEST_BINS)
 	@for test in $(TEST_BINS); do \

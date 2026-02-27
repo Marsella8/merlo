@@ -8,8 +8,8 @@ void test_embeddings_shape() {
     printf("  test_embeddings_shape\n");
     SmolLM2 model = load_main_model();
     
-    assert(model.embeddings.rows == VOCAB_SIZE);
-    assert(model.embeddings.cols == HIDDEN_SIZE);
+    assert(model.head.embeddings.rows == VOCAB_SIZE);
+    assert(model.head.embeddings.cols == HIDDEN_SIZE);
     free_model(model);
 }
 
@@ -17,8 +17,8 @@ void test_block_shapes() {
     printf("  test_block_shapes\n");
     SmolLM2 model = load_main_model();
     
-    for (size_t i = 0; i < model.num_layers; i++) {
-        Block block = model.blocks[i];
+    for (size_t i = 0; i < model.layers.num_layers; i++) {
+        Block block = model.layers.blocks[i];
         
         assert(block.attn_norm.rows == 1);
         assert(block.attn_norm.cols == HIDDEN_SIZE);
@@ -54,8 +54,8 @@ void test_final_norm_shape() {
     printf("  test_final_norm_shape\n");
     SmolLM2 model = load_main_model();
     
-    assert(model.final_norm.rows == 1);
-    assert(model.final_norm.cols == HIDDEN_SIZE);
+    assert(model.tail.final_norm.rows == 1);
+    assert(model.tail.final_norm.cols == HIDDEN_SIZE);
     free_model(model);
 }
 
@@ -63,8 +63,8 @@ void test_lm_head_shape() {
     printf("  test_lm_head_shape\n");
     SmolLM2 model = load_main_model();
     
-    assert(model.lm_head.rows == HIDDEN_SIZE);
-    assert(model.lm_head.cols == VOCAB_SIZE);
+    assert(model.tail.lm_head.rows == HIDDEN_SIZE);
+    assert(model.tail.lm_head.cols == VOCAB_SIZE);
     free_model(model);
 }
 

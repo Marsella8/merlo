@@ -10,6 +10,8 @@
 const char* PATH = "model/";
 typedef Matrix (*AttnFn)(Matrix, Matrix, Matrix, Matrix, Matrix, LayerCache, size_t);
 
+static LayerCache init_layer_cache();
+
 static FILE* get_file(const char *name, const int layer) {
     char dest[256]; 
     if (layer == -1) {
@@ -83,37 +85,49 @@ static Block load_block(size_t layer) {
         .gate = load_matrix("ffn_gate", layer),
         .up = load_matrix("ffn_up", layer),
         .down = load_matrix("ffn_down", layer),
+        .cache = init_layer_cache(),
     };
 }
 
-static KVCache init_kvcache(size_t num_layers) {
-    KVCache cache = {0};
-    cache.caches = malloc(num_layers * sizeof(LayerCache));
-    cache.size = num_layers;
+static LayerCache init_layer_cache() {
+    return (LayerCache){
+        .k = empty(KV_SIZE, MAX_SEQ_LEN),
+        .v = empty(KV_SIZE, MAX_SEQ_LEN),
+    };
+}
+
+SmolLMHeadShard load_head_shard() {
+    Matrix embd_transposed = load_matrix("token_embd", -1);
+    Matrix emb_view = transpose(embd_transposed);
+    Matrix emb = empty(emb_view.rows, emb_view.cols);
+    copy(emb_view, emb);
+    free_mat(embd_transposed);
+    return (SmolLMHeadShard){ .embeddings = emb };
+}
+
+SmolLMLayerShard load_layer_shard(size_t num_layers) {
+    SmolLMLayerShard layers = {0};
+    layers.num_layers = num_layers;
+    layers.blocks = malloc(num_layers * sizeof(Block));
     for (size_t i = 0; i < num_layers; i++) {
-        cache.caches[i].k = empty(KV_SIZE, MAX_SEQ_LEN);
-        cache.caches[i].v = empty(KV_SIZE, MAX_SEQ_LEN);
+        layers.blocks[i] = load_block(i);
     }
-    return cache;
+    return layers;
+}
+
+SmolLMTailShard load_tail_shard() {
+    SmolLMTailShard tail = {0};
+    tail.final_norm = load_matrix("output_norm", -1);
+    tail.lm_head = load_matrix("token_embd", -1);
+    return tail;
 }
 
 SmolLM2 load_model(size_t num_layers) {
-    SmolLM2 model;
-    model.num_layers = num_layers;
-
-    Matrix embd_transposed = load_matrix("token_embd", -1);
-    model.embeddings = transpose(embd_transposed);
-    model.blocks = malloc(num_layers * sizeof(Block));
-    for (size_t i = 0; i < num_layers; i++) {
-        model.blocks[i] = load_block(i);
-    }
-
-    model.final_norm = load_matrix("output_norm", -1);
-    model.lm_head = embd_transposed;
-
-    model.cache = init_kvcache(num_layers);
-
-    return model;
+    return (SmolLM2){
+        .head = load_head_shard(),
+        .layers = load_layer_shard(num_layers),
+        .tail = load_tail_shard(),
+    };
 }
 
 SmolLM2 load_main_model() {
@@ -134,29 +148,35 @@ static void free_block(Block b) {
     free_mat(b.gate);
     free_mat(b.up);
     free_mat(b.down);
+    free_mat(b.cache.k);
+    free_mat(b.cache.v);
+}
+
+void free_head_shard(SmolLMHeadShard head) {
+    free_mat(head.embeddings);
+}
+
+void free_layer_shard(SmolLMLayerShard layers) {
+    for (size_t i = 0; i < layers.num_layers; i++) {
+        free_block(layers.blocks[i]);
+    }
+    free(layers.blocks);
+}
+
+void free_tail_shard(SmolLMTailShard tail) {
+    free_mat(tail.final_norm);
+    free_mat(tail.lm_head);
 }
 
 void free_model(SmolLM2 model) {
-    free_mat(model.lm_head);
-    for (size_t i = 0; i < model.num_layers; i++) {
-        free_block(model.blocks[i]);
-    }
-    free(model.blocks);
-    free_mat(model.final_norm);
-    free_kvcache(model.cache);
+    free_head_shard(model.head);
+    free_layer_shard(model.layers);
+    free_tail_shard(model.tail);
 }
 
-void free_kvcache(KVCache cache) {
-    for (size_t i = 0; i < cache.size; i++) {
-        free_mat(cache.caches[i].k);
-        free_mat(cache.caches[i].v);
-    }
-    free(cache.caches);
-}
-
-static Matrix layer_fwd(Block b, Matrix x, LayerCache cache, size_t pos, AttnFn attn_fwd) {
+static Matrix layer_fwd(Block b, Matrix x, size_t pos, AttnFn attn_fwd) {
     Matrix attn_norm = rms_norm(x, b.attn_norm);
-    Matrix attn = attn_fwd(attn_norm, b.q, b.k, b.v, b.o, cache, pos);
+    Matrix attn = attn_fwd(attn_norm, b.q, b.k, b.v, b.o, b.cache, pos);
     free_mat(attn_norm);
     Matrix attn_out = add(x, attn);
     free_mat(attn);
@@ -172,36 +192,65 @@ static Matrix layer_fwd(Block b, Matrix x, LayerCache cache, size_t pos, AttnFn 
 }
 
 static Matrix prefill_from_zero(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos) {
-    (void)pos;
     return prefill_gqa(x, Wq, Wk, Wv, Wo, cache);
 }
 
-void prefill(SmolLM2 model, Matrix x) {
-    Matrix out = embed(model.embeddings, x);
-    for (size_t l = 0; l < model.num_layers; l++) {
-        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], 0, prefill_from_zero);
+Matrix head_fwd(SmolLMHeadShard head, Matrix token_ids) {
+    return embed(head.embeddings, token_ids);
+}
+
+Matrix layers_prefill_fwd(SmolLMLayerShard layers, Matrix x) {
+#ifdef SAFETY
+    assert(layers.num_layers > 0);
+#endif
+
+    Matrix out = layer_fwd(layers.blocks[0], x, 0, prefill_from_zero);
+    for (size_t l = 1; l < layers.num_layers; l++) {
+        Matrix next = layer_fwd(layers.blocks[l], out, 0, prefill_from_zero);
         free_mat(out);
         out = next;
     }
-    free_mat(out);
+    return out;
+}
+
+Matrix layers_decode_fwd(SmolLMLayerShard layers, Matrix x, size_t pos) {
+#ifdef SAFETY
+    assert(layers.num_layers > 0);
+#endif
+
+    Matrix out = layer_fwd(layers.blocks[0], x, pos, decode_gqa);
+    for (size_t l = 1; l < layers.num_layers; l++) {
+        Matrix next = layer_fwd(layers.blocks[l], out, pos, decode_gqa);
+        free_mat(out);
+        out = next;
+    }
+    return out;
+}
+
+Matrix tail_fwd(SmolLMTailShard tail, Matrix x) {
+    Matrix normed = rms_norm(x, tail.final_norm);
+    Matrix logits = matmul(normed, tail.lm_head);
+    free_mat(normed);
+    return logits;
+}
+
+void prefill(SmolLM2 model, Matrix x) {
+    Matrix head_out = head_fwd(model.head, x);
+    Matrix layered = layers_prefill_fwd(model.layers, head_out);
+    free_mat(head_out);
+    free_mat(layered);
 }
 
 Matrix fwd(SmolLM2 model, size_t token_id, size_t pos) {
     Matrix token = empty(1, 1);
     *at(token, 0, 0) = (float)token_id;
 
-    Matrix out = embed(model.embeddings, token);
+    Matrix head_out = head_fwd(model.head, token);
     free_mat(token);
 
-    for (size_t l = 0; l < model.num_layers; l++) {
-        Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], pos, decode_gqa);
-        free_mat(out);
-        out = next;
-    }
-
-    Matrix normed = rms_norm(out, model.final_norm);
-    Matrix logits = matmul(normed, model.lm_head);
-    free_mat(out);
-    free_mat(normed);
+    Matrix layered = layers_decode_fwd(model.layers, head_out, pos);
+    free_mat(head_out);
+    Matrix logits = tail_fwd(model.tail, layered);
+    free_mat(layered);
     return logits;
 }

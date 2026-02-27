@@ -3,3 +3,5 @@ model/
 .venv/
 __pycache__
 .vscode/
+perf.data
+perf.data.old
