@@ -14,7 +14,7 @@ int main() {
     size_t last_token_id = (size_t)*at(tokens, 0, tokens.cols - 1);
     for (size_t pos = tokens.cols; pos < MAX_SEQ_LEN; pos++) {
         Matrix logits = fwd(model, last_token_id, pos);
-        size_t token = argmax(logits);
+        size_t token = sample(logits, 0.9f);
         char* str = vocab.tokens[token];
         printf("%s", str);
         fflush(stdout);
