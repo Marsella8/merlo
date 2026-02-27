@@ -26,11 +26,17 @@ Matrix silu(Matrix x) {
 Matrix embed(Matrix embeddings, Matrix tokens) {
 #ifdef SAFETY
     assert(tokens.rows == 1);
+    assume_shape(embeddings, -1, HIDDEN_SIZE);
 #endif
     Matrix m = empty(tokens.cols, embeddings.cols);
     for (size_t i = 0; i < tokens.cols; i++) {
         size_t id = (size_t)*at(tokens, 0, i);
-        memcpy(at(m, i, 0), at(embeddings, id, 0), embeddings.cols * sizeof(float));
+#ifdef SAFETY
+        assert(id < embeddings.rows);
+#endif
+        for (size_t j = 0; j < embeddings.cols; j++) {
+            *at(m, i, j) = *at(embeddings, id, j);
+        }
     }
     return m;
 }

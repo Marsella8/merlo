@@ -5,6 +5,6 @@
 #include "model.h"
 
 size_t argmax(Matrix logits);
-size_t sample(Matrix logits);
+size_t sample(Matrix logits, float temperature);
 
 #endif // SAMPLE_H

@@ -1,8 +1,10 @@
 #include "sample.h"
 #include "matrix.h"
 #include "model.h"
+#include "nn.h"
 #include "utils.h"
 #include <assert.h>
+#include <stdlib.h>
 
 size_t argmax(Matrix logits) {
 #ifdef SAFETY
@@ -17,7 +19,29 @@ size_t argmax(Matrix logits) {
     return idx;
 }
 
-size_t sample(Matrix logits) {
-    panic("Not implemented");
-    return 0;
+float rand_float() {
+    return (float)rand() / ((float)RAND_MAX + 1.0f);
+}
+
+size_t sample(Matrix logits, float temperature) {
+#ifdef SAFETY
+    assume_shape(logits, 1, VOCAB_SIZE);
+    assert(temperature > 0.0f);
+#endif
+    Matrix scaled = scale(logits, 1.0f / temperature);
+    Matrix probs = softmax(scaled);
+    free_mat(scaled);
+
+    float r = rand_float();
+    float cum = 0.0f;
+    for (size_t i = 0; i < (size_t)VOCAB_SIZE; i++) {
+        cum += *at(probs, 0, i);
+        if (r <= cum) {
+            free_mat(probs);
+            return i;
+        }
+    }
+
+    free_mat(probs);
+    return (size_t)VOCAB_SIZE - 1;
 }

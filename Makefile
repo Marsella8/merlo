@@ -1,6 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DSAFETY -lm
-# Otherwise the stack gets smashed uhhhh
+CFLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable -Iinclude -lm
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -29,7 +28,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 lint:
 	clang-tidy $(SRCS) -- $(CFLAGS)
 
-debug: CFLAGS += -g -O0
+debug: CFLAGS += -g -O0 -DSAFETY
 debug: clean all
 
 test: $(TEST_BINS)
