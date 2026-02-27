@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include "matrix.h"
 
-#define NUM_LAYERS 30
+#define NUM_MAIN_LAYERS 30
+#define NUM_SPEC_LAYERS 10 // TODO: idk this number yet 
 #define VOCAB_SIZE 49152
 #define HIDDEN_SIZE 576
 #define INTERMEDIATE_SIZE 1536
@@ -30,18 +31,22 @@ typedef struct {
 } LayerCache;
 
 typedef struct {
-    LayerCache caches[NUM_LAYERS]; 
+    LayerCache* caches;
+    size_t size; 
 } KVCache;
 
 typedef struct {
+    size_t num_layers;
     Matrix embeddings;
-    Block blocks[NUM_LAYERS];
+    Block* blocks;
     Matrix final_norm;
     Matrix lm_head;
     KVCache cache;
 } SmolLM2;
 
-SmolLM2 load_model();
+SmolLM2 load_model(size_t num_layers);
+SmolLM2 load_main_model();
+SmolLM2 load_spec_model();
 void free_kvcache(KVCache cache);
 void free_model(SmolLM2 model);
 Matrix load_matrix(const char* name, const int layer);

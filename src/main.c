@@ -5,8 +5,8 @@
 #include "sample.h"
 
 int main() {
-    const char* prompt = "Hello my name is ";
-    SmolLM2 model = load_model();
+    const char* prompt = "The color of the sky is ";
+    SmolLM2 model = load_main_model();
     Vocab vocab = load_vocab();
     Matrix tokens = tokenize(prompt, vocab);
     prefill(model, tokens);

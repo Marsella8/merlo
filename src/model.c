@@ -86,31 +86,42 @@ static Block load_block(size_t layer) {
     };
 }
 
-static KVCache init_kvcache() {
+static KVCache init_kvcache(size_t num_layers) {
     KVCache cache = {0};
-    for (size_t i = 0; i < NUM_LAYERS; i++) {
+    cache.caches = malloc(num_layers * sizeof(LayerCache));
+    cache.size = num_layers;
+    for (size_t i = 0; i < num_layers; i++) {
         cache.caches[i].k = empty(KV_SIZE, MAX_SEQ_LEN);
         cache.caches[i].v = empty(KV_SIZE, MAX_SEQ_LEN);
     }
     return cache;
 }
 
-SmolLM2 load_model() {
+SmolLM2 load_model(size_t num_layers) {
     SmolLM2 model;
+    model.num_layers = num_layers;
 
     Matrix embd_transposed = load_matrix("token_embd", -1);
     model.embeddings = transpose(embd_transposed);
-
-    for (size_t i = 0; i < NUM_LAYERS; i++) {
+    model.blocks = malloc(num_layers * sizeof(Block));
+    for (size_t i = 0; i < num_layers; i++) {
         model.blocks[i] = load_block(i);
     }
 
     model.final_norm = load_matrix("output_norm", -1);
     model.lm_head = embd_transposed;
 
-    model.cache = init_kvcache();
+    model.cache = init_kvcache(num_layers);
 
     return model;
+}
+
+SmolLM2 load_main_model() {
+    return load_model(NUM_MAIN_LAYERS);
+}
+
+SmolLM2 load_spec_model() {
+    return load_model(NUM_SPEC_LAYERS);
 }
 
 static void free_block(Block b) {
@@ -127,18 +138,20 @@ static void free_block(Block b) {
 
 void free_model(SmolLM2 model) {
     free_mat(model.lm_head);
-    for (int i = 0; i < NUM_LAYERS; i++) {
+    for (size_t i = 0; i < model.num_layers; i++) {
         free_block(model.blocks[i]);
     }
+    free(model.blocks);
     free_mat(model.final_norm);
     free_kvcache(model.cache);
 }
 
 void free_kvcache(KVCache cache) {
-    for (int i = 0; i < NUM_LAYERS; i++) {
+    for (size_t i = 0; i < cache.size; i++) {
         free_mat(cache.caches[i].k);
         free_mat(cache.caches[i].v);
     }
+    free(cache.caches);
 }
 
 static Matrix layer_fwd(Block b, Matrix x, LayerCache cache, size_t pos, AttnFn attn_fwd) {
@@ -165,7 +178,7 @@ static Matrix prefill_from_zero(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matri
 
 void prefill(SmolLM2 model, Matrix x) {
     Matrix out = embed(model.embeddings, x);
-    for (int l = 0; l < NUM_LAYERS; l++) {
+    for (size_t l = 0; l < model.num_layers; l++) {
         Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], 0, prefill_from_zero);
         free_mat(out);
         out = next;
@@ -180,7 +193,7 @@ Matrix fwd(SmolLM2 model, size_t token_id, size_t pos) {
     Matrix out = embed(model.embeddings, token);
     free_mat(token);
 
-    for (int l = 0; l < NUM_LAYERS; l++) {
+    for (size_t l = 0; l < model.num_layers; l++) {
         Matrix next = layer_fwd(model.blocks[l], out, model.cache.caches[l], pos, decode_gqa);
         free_mat(out);
         out = next;
