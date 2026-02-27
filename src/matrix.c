@@ -34,19 +34,14 @@ int8_t* at_i8(QMatrix mat, size_t r, size_t c) {
     return &((int8_t*)mat.weights->data)[start];
 }
 
-static inline bool is_contiguous(Matrix m) {
-    return m.row_stride >= 0 && m.col_stride == 1 && (size_t)m.row_stride == m.cols;
+static inline bool is_row_major(Matrix m) {
+    return m.row_stride > 0 && m.col_stride == 1;
 }
 
-static inline float* as_ptr(Matrix mat) {
-#ifdef SAFETY
-    if (mat.buffer == NULL) {
-        panic("as_ptr called on NULL matrix buffer");
-    }
-    assert(is_contiguous(mat));
-#endif
-    return &((float*)mat.buffer->data)[mat.offset];
+static inline bool is_col_major(Matrix m) {
+    return m.col_stride > 0 && m.row_stride == 1;
 }
+
 
 Buffer* buf(size_t size) {
     Buffer* b_ptr = malloc(sizeof(Buffer));
@@ -204,18 +199,52 @@ Matrix matmul(Matrix a, Matrix b) {
 #endif
     Matrix result = empty(a.rows, b.cols);
 
-    if (is_contiguous(a) && is_contiguous(b)) {
-        const float* a_data = as_ptr(a);
-        const float* b_data = as_ptr(b);
-        float* out_data = as_ptr(result);
 
-        for (size_t i = 0; i < a.rows; i++) {
-            for (size_t j = 0; j < b.cols; j++) {
-                float sum = 0.0f;
-                for (size_t k = 0; k < a.cols; k++) {
-                    sum += a_data[i * a.cols + k] * b_data[k * b.cols + j];
+    if (is_row_major(a) && is_row_major(b)) {
+        const size_t M = a.rows;
+        const size_t K = a.cols;
+        const size_t N = b.cols;
+
+        const float* a_base = &((float*)a.buffer->data)[a.offset];
+        const float* b_base = &((float*)b.buffer->data)[b.offset];
+        float* out_base = &((float*)result.buffer->data)[result.offset];
+
+        for (size_t i = 0; i < M; i++) {
+            const float* a_row = a_base + i * (size_t)a.row_stride;
+            float* out_row = out_base + i * (size_t)result.row_stride;
+
+            memset(out_row, 0, N * sizeof(float));
+            for (size_t k = 0; k < K; k++) {
+                const float a_ik = a_row[k];
+                const float* b_row = b_base + k * (size_t)b.row_stride;
+                for (size_t j = 0; j < N; j++) {
+                    out_row[j] += a_ik * b_row[j];
                 }
-                out_data[i * b.cols + j] = sum;
+            }
+        }
+        return result;
+    }
+
+    if (is_row_major(a) && is_col_major(b)) {
+        const size_t M = a.rows;
+        const size_t K = a.cols;
+        const size_t N = b.cols;
+
+        const float* a_base = &((float*)a.buffer->data)[a.offset];
+        const float* b_base = &((float*)b.buffer->data)[b.offset];
+        float* out_base = &((float*)result.buffer->data)[result.offset];
+
+        for (size_t i = 0; i < M; i++) {
+            const float* a_row = a_base + i * (size_t)a.row_stride;
+            float* out_row = out_base + i * (size_t)result.row_stride;
+
+            for (size_t j = 0; j < N; j++) {
+                const float* b_col = b_base + j * (size_t)b.col_stride;
+                float sum = 0.0f;
+                for (size_t k = 0; k < K; k++) {
+                    sum += a_row[k] * b_col[k];
+                }
+                out_row[j] = sum;
             }
         }
         return result;
