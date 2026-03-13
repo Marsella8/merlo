@@ -1,7 +1,6 @@
 #ifndef NN_H
 #define NN_H
 
-#include <stddef.h>
 #include "matrix.h"
 #include "model.h"
 

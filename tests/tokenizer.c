@@ -1,9 +1,9 @@
-#include <stdio.h>
-#include <string.h>
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
 #include "tokenizer.h"
-#include "matrix.h"
 
 char* tokens_arr[] = {"a", "b", "aa", "bb", "ba", "ab", "aaa", "aab", "baa", "bab", "bba", "bbb"};
 Vocab vocab = {

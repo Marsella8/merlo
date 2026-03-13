@@ -1,10 +1,11 @@
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <math.h>
+
 #include "matrix.h"
 #include "utils.h"
-#include <stddef.h>
 
 float* at_f32(Matrix mat, size_t r, size_t c) {
 #ifdef SAFETY
@@ -104,6 +105,25 @@ Matrix mat(const Buffer* buffer, size_t rows, size_t cols) {
 Matrix empty(size_t rows, size_t cols) {
     Buffer* b = buf(rows * cols * sizeof(float));
     return mat(b, rows, cols);
+}
+
+Matrix as_contiguous(Matrix mat) {
+    Buffer* b = buf(mat.rows * mat.cols * sizeof(float));
+    float* dst = (float*)b->data;
+    for (size_t r = 0; r < mat.rows; r++) {
+        for (size_t c = 0; c < mat.cols; c++) {
+            *dst++ = *at_f32(mat, r, c);
+        }
+    }
+    return (Matrix){
+        .buffer = b,
+        .rows = mat.rows,
+        .cols = mat.cols,
+        .row_stride = (int)mat.cols,
+        .col_stride = 1,
+        .offset = 0,
+        .owned = true,
+    };
 }
 
 Matrix mat_from_array(size_t rows, size_t cols, float m[rows][cols]) {

@@ -1,8 +1,8 @@
-#include "utils.h"
 #include <assert.h>
 #include <math.h>
 #include <string.h>
-#include <stdlib.h>
+
+#include "utils.h"
 
 void panic_impl(const char* file, int line, const char* message) {
     fprintf(stderr, "%s:%d: %s\n", file, line, message);

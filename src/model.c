@@ -1,11 +1,9 @@
-#include <stdio.h>
 #include <assert.h>
-#include <string.h>
-#include "matrix.h"
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "model.h"
 #include "nn.h"
-#include "utils.h"
-#include <stdint.h>
 
 const char* PATH = "model/";
 typedef Matrix (*AttnFn)(Matrix, Matrix, Matrix, Matrix, Matrix, LayerCache, size_t);
@@ -98,9 +96,7 @@ static LayerCache init_layer_cache() {
 
 SmolLMHeadShard load_head_shard() {
     Matrix embd_transposed = load_matrix("token_embd", -1);
-    Matrix emb_view = transpose(embd_transposed);
-    Matrix emb = empty(emb_view.rows, emb_view.cols);
-    copy(emb_view, emb);
+    Matrix emb = as_contiguous(transpose(embd_transposed));
     free_mat(embd_transposed);
     return (SmolLMHeadShard){ .embeddings = emb };
 }

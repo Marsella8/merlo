@@ -1,6 +1,7 @@
 #include <assert.h>
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
+
 #include "matrix.h"
 
 float m[2][3] = {

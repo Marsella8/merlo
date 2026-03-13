@@ -1,7 +1,6 @@
 #ifndef MODEL_H
 #define MODEL_H
 
-#include <stddef.h>
 #include "matrix.h"
 
 #define NUM_MAIN_LAYERS 30

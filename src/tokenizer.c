@@ -1,8 +1,9 @@
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "tokenizer.h"
 #include "utils.h"
-#include <string.h>
-#include <stdlib.h>
-#include <assert.h>
 
 Vocab load_vocab() {
     FILE *fp = fopen(VOCAB_PATH, "rb");

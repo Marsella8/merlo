@@ -2,8 +2,6 @@
 #define TOKENIZER_H
 
 #include "matrix.h"
-#include <stddef.h>
-#include <stdbool.h>
 
 static const char* const VOCAB_PATH = "model/vocab.txt";
 

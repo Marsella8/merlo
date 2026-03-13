@@ -1,12 +1,7 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
 #include <assert.h>
+#include <math.h>
+
 #include "nn.h"
-#include "model.h"
-#include "utils.h"
-#include <string.h>
-#include "matrix.h"
 
 Matrix silu(Matrix x) {
     Matrix m = empty(x.rows, x.cols);
@@ -34,9 +29,9 @@ Matrix embed(Matrix embeddings, Matrix tokens) {
 #ifdef SAFETY
         assert(id < embeddings.rows);
 #endif
-        for (size_t j = 0; j < embeddings.cols; j++) {
-            *at(m, i, j) = *at(embeddings, id, j);
-        }
+        Matrix src_row = slice(embeddings, id, id + 1, 0, embeddings.cols);
+        Matrix dst_row = slice(m, i, i + 1, 0, embeddings.cols);
+        copy(src_row, dst_row);
     }
     return m;
 }

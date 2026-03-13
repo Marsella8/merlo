@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
+
 #include "model.h"
-#include "matrix.h"
 #include "tokenizer.h"
 
 void test_embeddings_shape() {

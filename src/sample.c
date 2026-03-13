@@ -1,10 +1,8 @@
-#include "sample.h"
-#include "matrix.h"
-#include "model.h"
-#include "nn.h"
-#include "utils.h"
 #include <assert.h>
 #include <stdlib.h>
+
+#include "nn.h"
+#include "sample.h"
 
 size_t argmax(Matrix logits) {
 #ifdef SAFETY

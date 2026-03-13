@@ -1,8 +1,8 @@
 #include <stdio.h>
-#include <string.h>
+
 #include "model.h"
-#include "tokenizer.h"
 #include "sample.h"
+#include "tokenizer.h"
 
 int main() {
     const char* prompt = "The color of the sky is ";

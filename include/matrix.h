@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <assert.h>
 
+// basically a fat pointer.
 typedef struct {
     void* data; 
     size_t size; // in bytes
@@ -46,6 +47,7 @@ void free_mat(Matrix m);
 void free_qmat(QMatrix q);
 Matrix mat(const Buffer* buffer, size_t rows, size_t cols);
 Matrix empty(size_t rows, size_t cols);
+Matrix as_contiguous(Matrix mat);
 Matrix mat_from_array(size_t rows, size_t cols, float m[rows][cols]);
 Matrix transpose(Matrix mat);
 Matrix slice(Matrix mat, size_t r_start, size_t r_end, size_t c_start, size_t c_end);
