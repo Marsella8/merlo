@@ -56,6 +56,8 @@ Matrix scale(Matrix a, float value);
 Matrix matmul(Matrix a, Matrix b);
 Matrix masked_matmul(Matrix a, Matrix b);
 Matrix qmatmul(Matrix a, QMatrix b);
+size_t num_elements(Matrix m);
+size_t num_bytes(Matrix m);
 bool eq(Matrix a, Matrix b);
 void copy(Matrix src, Matrix dst);
 QMatrix qtranspose(QMatrix q);

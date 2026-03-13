@@ -3,9 +3,14 @@
 
 #include "matrix.h"
 
+typedef struct {
+    Matrix matrix;
+    size_t token_pos;
+} Packet;
+
 Buffer* serialize_string(char* string);
 char* maybe_deserialize_string(Buffer* buf);
-Buffer* serialize_matrix(Matrix mat);
-Matrix maybe_deserialize_matrix(Buffer* buffer);
+Buffer* serialize_packet(Packet pkt);
+Packet maybe_deserialize_packet(Buffer* buf);
 
 #endif

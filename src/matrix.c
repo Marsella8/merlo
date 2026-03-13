@@ -102,13 +102,21 @@ Matrix mat(const Buffer* buffer, size_t rows, size_t cols) {
     return mat;
 }
 
+size_t num_elements(Matrix m) {
+    return m.rows * m.cols;
+}
+
+size_t num_bytes(Matrix m) {
+    return num_elements(m) * sizeof(float);
+}
+
 Matrix empty(size_t rows, size_t cols) {
     Buffer* b = buf(rows * cols * sizeof(float));
     return mat(b, rows, cols);
 }
 
 Matrix as_contiguous(Matrix mat) {
-    Buffer* b = buf(mat.rows * mat.cols * sizeof(float));
+    Buffer* b = buf(num_bytes(mat));
     float* dst = (float*)b->data;
     for (size_t r = 0; r < mat.rows; r++) {
         for (size_t c = 0; c < mat.cols; c++) {
@@ -219,24 +227,21 @@ Matrix matmul(Matrix a, Matrix b) {
 #endif
     Matrix result = empty(a.rows, b.cols);
 
-
     if (is_row_major(a) && is_row_major(b)) {
         const size_t M = a.rows;
         const size_t K = a.cols;
         const size_t N = b.cols;
-
-        const float* a_base = &((float*)a.buffer->data)[a.offset];
-        const float* b_base = &((float*)b.buffer->data)[b.offset];
-        float* out_base = &((float*)result.buffer->data)[result.offset];
+        const float* restrict a_base = &((float*)a.buffer->data)[a.offset];
+        const float* restrict b_base = &((float*)b.buffer->data)[b.offset];
+        float* restrict out_base = &((float*)result.buffer->data)[result.offset];
 
         for (size_t i = 0; i < M; i++) {
-            const float* a_row = a_base + i * (size_t)a.row_stride;
-            float* out_row = out_base + i * (size_t)result.row_stride;
-
+            const float* restrict a_row = a_base + i * (size_t)a.row_stride;
+            float* restrict out_row = out_base + i * (size_t)result.row_stride;
             memset(out_row, 0, N * sizeof(float));
             for (size_t k = 0; k < K; k++) {
                 const float a_ik = a_row[k];
-                const float* b_row = b_base + k * (size_t)b.row_stride;
+                const float* restrict b_row = b_base + k * (size_t)b.row_stride;
                 for (size_t j = 0; j < N; j++) {
                     out_row[j] += a_ik * b_row[j];
                 }
@@ -249,17 +254,15 @@ Matrix matmul(Matrix a, Matrix b) {
         const size_t M = a.rows;
         const size_t K = a.cols;
         const size_t N = b.cols;
-
-        const float* a_base = &((float*)a.buffer->data)[a.offset];
-        const float* b_base = &((float*)b.buffer->data)[b.offset];
-        float* out_base = &((float*)result.buffer->data)[result.offset];
+        const float* restrict a_base = &((float*)a.buffer->data)[a.offset];
+        const float* restrict b_base = &((float*)b.buffer->data)[b.offset];
+        float* restrict out_base = &((float*)result.buffer->data)[result.offset];
 
         for (size_t i = 0; i < M; i++) {
-            const float* a_row = a_base + i * (size_t)a.row_stride;
-            float* out_row = out_base + i * (size_t)result.row_stride;
-
+            const float* restrict a_row = a_base + i * (size_t)a.row_stride;
+            float* restrict out_row = out_base + i * (size_t)result.row_stride;
             for (size_t j = 0; j < N; j++) {
-                const float* b_col = b_base + j * (size_t)b.col_stride;
+                const float* restrict b_col = b_base + j * (size_t)b.col_stride;
                 float sum = 0.0f;
                 for (size_t k = 0; k < K; k++) {
                     sum += a_row[k] * b_col[k];
@@ -279,14 +282,13 @@ Matrix matmul(Matrix a, Matrix b) {
             *at(result, i, j) = sum;
         }
     }
-    
     return result;
 }
 
 Matrix masked_matmul(Matrix a, Matrix b) {
- #ifdef SAFETY
+#ifdef SAFETY
     assert(a.cols == b.rows);
- #endif
+#endif
     Matrix result = empty(a.rows, b.cols);
     for (size_t i = 0; i < a.rows; i++) {
         for (size_t j = 0; j <= i; j++) {

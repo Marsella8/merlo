@@ -5,8 +5,8 @@
 #include "tokenizer.h"
 
 int main() {
-    const char* prompt = "The color of the sky is ";
-    size_t max_tokens = 50;
+    const char* prompt = "Dogs are the most";
+    size_t max_tokens = 100;
     SmolLM2 model = load_main_model();
     Vocab vocab = load_vocab();
     Matrix tokens = tokenize(prompt, vocab);
