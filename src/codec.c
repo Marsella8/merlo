@@ -33,24 +33,28 @@ char* maybe_deserialize_string(Buffer* buf) {
 
 const char* PKT_ID = "PKT";
 
+static inline char* insert(char* ptr, const void* src, size_t size) {
+    memcpy(ptr, src, size);
+    return ptr + size;
+}
+
+static inline char* extract(char* ptr, void* dst, size_t size) {
+    memcpy(dst, ptr, size);
+    return ptr + size;
+}
+
 Buffer* serialize_packet(Packet pkt) {
     Matrix c = as_contiguous(pkt.matrix);
     size_t data_len = num_bytes(c);
-    size_t packet_len = strlen(PKT_ID) + sizeof(size_t) + sizeof(size_t) + sizeof(size_t) + sizeof(int) + sizeof(int) + data_len;
+    size_t packet_len = strlen(PKT_ID) + sizeof(size_t) * 3 + sizeof(int) * 2 + data_len;
     Buffer* b = buf(packet_len);
     char* ptr = b->data;
-    memcpy(ptr, PKT_ID, strlen(PKT_ID));
-    ptr += strlen(PKT_ID);
-    memcpy(ptr, &pkt.token_pos, sizeof(size_t));
-    ptr += sizeof(size_t);
-    memcpy(ptr, &c.rows, sizeof(size_t));
-    ptr += sizeof(size_t);
-    memcpy(ptr, &c.cols, sizeof(size_t));
-    ptr += sizeof(size_t);
-    memcpy(ptr, &c.row_stride, sizeof(int));
-    ptr += sizeof(int);
-    memcpy(ptr, &c.col_stride, sizeof(int));
-    ptr += sizeof(int);
+    ptr = insert(ptr, PKT_ID, strlen(PKT_ID));
+    ptr = insert(ptr, &pkt.token_pos, sizeof(size_t));
+    ptr = insert(ptr, &c.rows, sizeof(size_t));
+    ptr = insert(ptr, &c.cols, sizeof(size_t));
+    ptr = insert(ptr, &c.row_stride, sizeof(int));
+    ptr = insert(ptr, &c.col_stride, sizeof(int));
     memcpy(ptr, c.buffer->data, data_len);
     free_mat(c);
     return b;
@@ -64,16 +68,11 @@ Packet maybe_deserialize_packet(Buffer* buffer) {
     char* ptr = buffer->data + strlen(PKT_ID);
     size_t token_pos, rows, cols;
     int row_stride, col_stride;
-    memcpy(&token_pos, ptr, sizeof(size_t));
-    ptr += sizeof(size_t);
-    memcpy(&rows, ptr, sizeof(size_t));
-    ptr += sizeof(size_t);
-    memcpy(&cols, ptr, sizeof(size_t));
-    ptr += sizeof(size_t);
-    memcpy(&row_stride, ptr, sizeof(int));
-    ptr += sizeof(int);
-    memcpy(&col_stride, ptr, sizeof(int));
-    ptr += sizeof(int);
+    ptr = extract(ptr, &token_pos, sizeof(size_t));
+    ptr = extract(ptr, &rows, sizeof(size_t));
+    ptr = extract(ptr, &cols, sizeof(size_t));
+    ptr = extract(ptr, &row_stride, sizeof(int));
+    ptr = extract(ptr, &col_stride, sizeof(int));
     size_t data_len = num_bytes((Matrix){ .rows = rows, .cols = cols });
     Buffer* b = buf(data_len);
     memcpy(b->data, ptr, data_len);

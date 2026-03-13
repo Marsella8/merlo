@@ -135,17 +135,9 @@ SmolLM2 load_spec_model() {
 }
 
 static void free_block(Block b) {
-    free_mat(b.attn_norm);
-    free_mat(b.q);
-    free_mat(b.k);
-    free_mat(b.v);
-    free_mat(b.o);
-    free_mat(b.ffn_norm);
-    free_mat(b.gate);
-    free_mat(b.up);
-    free_mat(b.down);
-    free_mat(b.cache.k);
-    free_mat(b.cache.v);
+    Matrix mats[] = { b.attn_norm, b.q, b.k, b.v, b.o, b.ffn_norm, b.gate, b.up, b.down, b.cache.k, b.cache.v };
+    for (size_t i = 0; i < sizeof(mats) / sizeof(mats[0]); i++)
+        free_mat(mats[i]);
 }
 
 void free_head_shard(SmolLMHeadShard head) {
@@ -187,19 +179,18 @@ static Matrix layer_fwd(Block b, Matrix x, size_t pos, AttnFn attn_fwd) {
     return ffn_out;
 }
 
-static Matrix prefill_from_zero(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos) {
-    return prefill_gqa(x, Wq, Wk, Wv, Wo, cache);
-}
-
 Matrix head_fwd(SmolLMHeadShard head, Matrix token_ids) {
     return embed(head.embeddings, token_ids);
+}
+
+static Matrix prefill_from_zero(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos) {
+    return prefill_gqa(x, Wq, Wk, Wv, Wo, cache);
 }
 
 Matrix layers_prefill_fwd(SmolLMLayerShard layers, Matrix x) {
 #ifdef SAFETY
     assert(layers.num_layers > 0);
 #endif
-
     Matrix out = layer_fwd(layers.blocks[0], x, 0, prefill_from_zero);
     for (size_t l = 1; l < layers.num_layers; l++) {
         Matrix next = layer_fwd(layers.blocks[l], out, 0, prefill_from_zero);
@@ -213,7 +204,6 @@ Matrix layers_decode_fwd(SmolLMLayerShard layers, Matrix x, size_t pos) {
 #ifdef SAFETY
     assert(layers.num_layers > 0);
 #endif
-
     Matrix out = layer_fwd(layers.blocks[0], x, pos, decode_gqa);
     for (size_t l = 1; l < layers.num_layers; l++) {
         Matrix next = layer_fwd(layers.blocks[l], out, pos, decode_gqa);
