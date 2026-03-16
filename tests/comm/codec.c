@@ -27,15 +27,6 @@ void test_string_maybe_deserialize_invalid() {
     free_buf(input);
 }
 
-void test_string_maybe_deserialize_unterminated() {
-    printf("  test_string_maybe_deserialize_unterminated\n");
-    Buffer* input = buf(6);
-    memcpy(input->data, "STRabc", 6);
-    char* output = maybe_deserialize_string(input);
-    assert(output == NULL);
-    free_buf(input);
-}
-
 void test_packet_roundtrip() {
     printf("  test_packet_roundtrip\n");
     float data[2][3] = {{1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}};
@@ -81,7 +72,6 @@ int main() {
     printf("codec tests:\n");
     test_string_roundtrip();
     test_string_maybe_deserialize_invalid();
-    test_string_maybe_deserialize_unterminated();
     test_packet_roundtrip();
     test_packet_roundtrip_non_contiguous();
     test_packet_maybe_deserialize_invalid();

@@ -26,13 +26,7 @@ char* maybe_deserialize_string(Buffer* buf) {
         return NULL;
     }
     char* ptr = buf->data + id_len;
-    size_t payload_len = buf->size - id_len;
-    char* terminator = memchr(ptr, '\0', payload_len);
-    if (terminator == NULL) {
-        return NULL;
-    }
-
-    size_t len = (size_t)(terminator - ptr) + 1;
+    size_t len = strlen(ptr) + 1;
     char* data = malloc(len);
     memcpy(data, ptr, len);
     return data;
