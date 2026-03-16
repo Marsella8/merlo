@@ -8,7 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MODEL_BF16 = "HuggingFaceTB/SmolLM2-135M-Instruct"
 MODEL_INT8 = "onnx/model_int8.onnx"
-MODEL_DIR = Path(__file__).parent.parent / "model"
+MODEL_DIR = Path(__file__).parent.parent / "weights"
 MODEL_DIR.mkdir(exist_ok=True)
 VOCAB_PATH = MODEL_DIR / "vocab.txt"
 

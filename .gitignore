@@ -1,7 +1,11 @@
 build/
-model/
+weights/
 .venv/
 __pycache__
 .vscode/
-perf.data
-perf.data.old
+libpi/libpi.a
+libpi/libpi.a.list
+libpi/objs/
+libpi/staff-start.o
+libpi/libc/*.o
+libpi/libc/*.d

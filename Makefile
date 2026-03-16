@@ -1,37 +1,62 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable -Iinclude -lm -flto -march=native -DDEVICE_NAME=\"$(DEVICE_NAME)\"
+ARM = arm-none-eabi
+CC = $(ARM)-gcc
+OD = $(ARM)-objdump
+OCP = $(ARM)-objcopy
+
 DEVICE_NAME ?= HEAD
+LIBPI_DIR = libpi
+LIBPI_ENV = CS140E_2026_PATH=$(abspath .)
 
-SRCS = $(wildcard src/*.c)
-OBJS = $(SRCS:src/%.c=build/%.o)
-LIB = $(filter-out build/main.o, $(OBJS))
-TESTS = $(patsubst tests/%.c, build/test_%, $(wildcard tests/*.c))
+BUILD_DIR = build
+PROGRAM = merlo
+ELF = $(BUILD_DIR)/$(PROGRAM).elf
+BIN = $(BUILD_DIR)/$(PROGRAM).bin
+LIST = $(BUILD_DIR)/$(PROGRAM).list
 
-.PHONY: all clean test debug release
+INCLUDES = -Iinclude -Iinclude/comm -Iinclude/nn -Iinclude/model -I$(LIBPI_DIR)/include -I$(LIBPI_DIR) -I$(LIBPI_DIR)/src -I$(LIBPI_DIR)/libc
+ARCH_FLAGS = -ffreestanding -nostdlib -nostartfiles -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mno-unaligned-access -mtp=soft
+WARN_FLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable
+COMMON_FLAGS = -D__RPI__ -DDEVICE_NAME=\"$(DEVICE_NAME)\" -std=gnu99 $(ARCH_FLAGS) $(WARN_FLAGS) $(INCLUDES)
+OPT_FLAGS ?= -O3
+CFLAGS = $(COMMON_FLAGS) $(OPT_FLAGS)
+LDFLAGS = $(ARCH_FLAGS) -T $(LIBPI_DIR)/memmap
+LDLIBS = $(LIBPI_DIR)/libpi.a -lm -lgcc
+START = $(LIBPI_DIR)/staff-start.o
 
-all: CFLAGS += -O3
-all: build/main $(TESTS)
+SRCS = $(shell find src -name '*.c' | sort)
+OBJS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
-debug: CFLAGS += -g -O0 -DSAFETY
-debug: clean build/main $(TESTS)
+.PHONY: all clean debug release libpi libpi-clean
 
-release: CFLAGS += -O3
-release: clean build/main $(TESTS)
+all: $(BIN) $(LIST)
 
-test: all
-	@for t in $(TESTS); do ./$$t && echo "passed" || echo "failed"; done
+debug: OPT_FLAGS = -O0 -g -DSAFETY
+debug: clean $(BIN) $(LIST)
+
+release: OPT_FLAGS = -O3
+release: clean $(BIN) $(LIST)
+
+libpi:
+	$(MAKE) -C $(LIBPI_DIR) $(LIBPI_ENV) PROGS=
+
+libpi-clean:
+	$(MAKE) -C $(LIBPI_DIR) $(LIBPI_ENV) clean
 
 clean:
-	rm -rf build
+	rm -rf $(BUILD_DIR)
 
-build:
-	mkdir -p build
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
-build/%.o: src/%.c | build
+$(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
+	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/main: $(OBJS) | build
-	$(CC) $(CFLAGS) $(OBJS) -o $@
+$(ELF): $(OBJS) | $(BUILD_DIR) libpi
+	$(CC) $(LDFLAGS) -o $@ $(START) $(OBJS) $(LDLIBS)
 
-build/test_%: tests/%.c $(LIB) | build
-	$(CC) $(CFLAGS) $< $(LIB) -o $@
+$(BIN): $(ELF)
+	$(OCP) $< -O binary $@
+
+$(LIST): $(ELF)
+	$(OD) -d $< > $@
