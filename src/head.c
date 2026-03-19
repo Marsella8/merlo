@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <string.h>
 
 #include "comm.h"
 #include "load.h"
@@ -6,7 +7,6 @@
 #include "rpi.h"
 #include "sample.h"
 #include "tokenizer.h"
-#include "utils.h"
 
 #define HEAD_WEIGHTS_BASE ((uint8_t *)0x04000000)
 #define HEAD_TX_PIN 20
@@ -41,23 +41,30 @@ static void send_embedded_tokens(sw_uart_t *uart,
 }
 
 void notmain(void) {
-    const char *prompt = "The capital of France is";
+    /* Sentence: "What is the capital of France? It's " (HF SmolLM2, add_special_tokens=false). */
+    // static const char *prompt = "What is the capital of France? It's ";
+    static const float prompt_hf_ids[] = {
+        1780.f, 314.f,  260.f,  3575.f, 282.f, 4649.f, 47.f,
+        657.f,  506.f,  216.f,
+    };
+    enum { PROMPT_NUM_TOKENS = sizeof(prompt_hf_ids) / sizeof(prompt_hf_ids[0]) };
+
     size_t max_tokens = 100;
     uint8_t *embed_ptr = HEAD_WEIGHTS_BASE + head_embed_offset();
     uint8_t *out_norm_ptr = HEAD_WEIGHTS_BASE + head_out_norm_offset();
 
-    trace_head("start");
     kmalloc_init();
+    tokenizer_set_storage(HEAD_WEIGHTS_BASE, VOCAB_SIZE);
     sw_uart_t uart = comm_init(HEAD_TX_PIN, HEAD_RX_PIN);
 
     Endpoint endpoint = load_endpoint_at(embed_ptr, out_norm_ptr);
-    Matrix prompt_tokens = tokenize(prompt);
+    // Matrix prompt_tokens = tokenize(prompt);
+    Buffer *prompt_tokens_buf = buf(PROMPT_NUM_TOKENS * sizeof(float));
+    memcpy(prompt_tokens_buf->data, prompt_hf_ids, PROMPT_NUM_TOKENS * sizeof(float));
+    Matrix prompt_tokens = mat(prompt_tokens_buf, 1, PROMPT_NUM_TOKENS);
     size_t token_pos = prompt_tokens.cols;
-    trace_head("ready: prompt_tokens=%u", (unsigned)token_pos);
 
-    putk(prompt);
     send_embedded_tokens(&uart, endpoint, prompt_tokens, 0);
-    trace_head("sent prompt embedding");
     free_mat(prompt_tokens);
 
     while (token_pos < max_tokens) {
@@ -103,4 +110,5 @@ void notmain(void) {
         free_buf(buf);
         token_pos++;
     }
+#undef HEAD_USER
 }

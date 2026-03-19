@@ -5,13 +5,10 @@
 #include "matrix.h"
 
 void not_implemented_impl(const char* file, int line);
-void trace_impl(const char* label, const char* file, int line, const char* fmt, ...);
 void warning_impl(const char* file, int line, const char* message);
 void assume_no_nans_impl(Matrix m, const char* file, int line);
 
 #define not_implemented() not_implemented_impl(__FILE__, __LINE__)
-#define trace_head(...) trace_impl("HEAD", __FILE__, __LINE__, __VA_ARGS__)
-#define trace_tail(...) trace_impl("PIPE", __FILE__, __LINE__, __VA_ARGS__)
 #define warning(message) warning_impl(__FILE__, __LINE__, (message))
 #define assume_no_nans(m) assume_no_nans_impl((m), __FILE__, __LINE__)
 

@@ -4,7 +4,6 @@
 #include "model.h"
 #include "rpi.h"
 #include "tokenizer.h"
-#include "utils.h"
 
 #define TOKENIZER_OFFSET_BASE ((const uint8_t *)0x04000000)
 #define TOKEN_SIZE_BYTES 256
@@ -52,19 +51,28 @@ static bool token_matches_string(size_t token_id, const char *string, size_t str
            memcmp(lookup_token(token_id), string, string_len) == 0;
 }
 
-int tokenize_single_token(const char *string) {
-    if (string == NULL)
-        panic("tokenize_single_token(): string must not be NULL\n");
-    size_t string_len = strlen(string);
+static int tokenize_single_token_n(const char *string, size_t string_len) {
     for (size_t i = 0; i < tokenizer_vocab_size; i++) {
         if (token_matches_string(i, string, string_len))
-            return i;
+            return (int)i;
     }
     return NOT_A_TOKEN;
 }
 
+int tokenize_single_token(const char *string) {
+    if (string == NULL)
+        panic("tokenize_single_token(): string must not be NULL\n");
+    return tokenize_single_token_n(string, strlen(string));
+}
+
 Matrix tokenize(const char *string) {
+    if (string == NULL)
+        panic("tokenize(): string must not be NULL\n");
+
     size_t len = strlen(string);
+    if (len == 0)
+        return empty(1, 0);
+
     size_t num_bytes = len * sizeof(size_t);
     size_t *rle = malloc(num_bytes);
     for (size_t i = 0; i < len; i++)
@@ -76,9 +84,7 @@ Matrix tokenize(const char *string) {
         size_t offset = 0;
         for (size_t i = 0; i < len - 1; i++) {
             size_t span = rle[i] + rle[i + 1];
-            char *merged = substr(string, offset, offset + span);
-            int token_id = tokenize_single_token(merged);
-            free(merged);
+            int token_id = tokenize_single_token_n(string + offset, span);
             if (token_id != NOT_A_TOKEN && (size_t)token_id < min_rank) {
                 min_rank = token_id;
                 pos = i;
@@ -96,9 +102,7 @@ Matrix tokenize(const char *string) {
     float *data = (float *)b->data;
     size_t offset = 0;
     for (size_t i = 0; i < len; i++) {
-        char *token_str = substr(string, offset, offset + rle[i]);
-        int token_id = tokenize_single_token(token_str);
-        free(token_str);
+        int token_id = tokenize_single_token_n(string + offset, rle[i]);
         if (token_id == NOT_A_TOKEN)
             panic("tokenize(): unknown token span\n");
         data[i] = (float)token_id;
