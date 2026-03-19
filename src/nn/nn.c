@@ -1,10 +1,44 @@
 #include <math.h>
 
+#include "kernels/gating/kernel.h"
+#include "kernels/silu/kernel.h"
+#include "kernels/softmax/kernel.h"
 #include "nn.h"
+
+static inline void assert_owned_shape(Matrix m, size_t rows, size_t cols) {
+#ifdef SAFETY
+    assume_shape(m, rows, cols);
+    assert(m.buffer != NULL);
+    assert(m.owned);
+#endif
+}
+
+static void rope_into(Matrix x, size_t pos, Matrix out) {
+#ifdef SAFETY
+    assume_shape(out, x.rows, x.cols);
+    assert(x.cols % HEAD_DIM == 0);
+#endif
+    for (size_t t = 0; t < x.rows; t++) {
+        float token_pos = (float)(pos + t);
+        for (size_t head = 0; head < x.cols; head += HEAD_DIM) {
+            size_t half = HEAD_DIM / 2;
+            for (size_t i = 0; i < half; i++) {
+                float freq = 1.0f / powf(ROPE_THETA, (2.0f * (float)i) / HEAD_DIM);
+                float angle = token_pos * freq;
+                float cos_a = cosf(angle);
+                float sin_a = sinf(angle);
+                float x0 = *at(x, t, head + i);
+                float x1 = *at(x, t, head + half + i);
+                *at(out, t, head + i) = x0 * cos_a - x1 * sin_a;
+                *at(out, t, head + half + i) = x1 * cos_a + x0 * sin_a;
+            }
+        }
+    }
+}
 
 Matrix silu(Matrix x) {
     Matrix m = empty(x.rows, x.cols);
-    
+
     for (size_t i = 0; i < x.rows; i++) {
         for (size_t j = 0; j < x.cols; j++) {
             float val = *at(x, i, j);
@@ -12,48 +46,41 @@ Matrix silu(Matrix x) {
             *at(m, i, j) = val * sigmoid;
         }
     }
-    
+
     return m;
 }
 
+void silu_inplace(Matrix x) {
+    silu_kernel_inplace(x);
+}
 
-Matrix embed(Matrix embeddings, Matrix tokens) {
+void embed_into(QMatrix lm_head, Matrix tokens, Matrix out) {
 #ifdef SAFETY
     assert(tokens.rows == 1);
-    assume_shape(embeddings, -1, HIDDEN_SIZE);
+    assume_shape(lm_head, VOCAB_SIZE, HIDDEN_SIZE);
+    assume_shape(out, tokens.cols, HIDDEN_SIZE);
 #endif
-    Matrix m = empty(tokens.cols, embeddings.cols);
     for (size_t i = 0; i < tokens.cols; i++) {
         size_t id = (size_t)*at(tokens, 0, i);
 #ifdef SAFETY
-        assert(id < embeddings.rows);
+        assert(id < lm_head.rows);
 #endif
-        Matrix src_row = slice(embeddings, id, id + 1, 0, embeddings.cols);
-        Matrix dst_row = slice(m, i, i + 1, 0, embeddings.cols);
-        copy(src_row, dst_row);
+        Matrix out_row = slice(out, i, i + 1, 0, HIDDEN_SIZE);
+        qmatrix_row_decode_into(lm_head, id, out_row);
     }
-    return m;
 }
 
 Matrix rope(Matrix x, size_t pos) {
     Matrix out = empty(x.rows, x.cols);
-    for (size_t t = 0; t < x.rows; t++) {
-        for (size_t i = 0; i < x.cols; i += 2) {
-            float freq = 1.0f / powf(ROPE_THETA, (float)(i % HEAD_DIM) / HEAD_DIM);
-            float angle = (pos + t) * freq;
-            float cos_a = cosf(angle);
-            float sin_a = sinf(angle);
-            float x0 = *at(x, t, i);
-            float x1 = *at(x, t, i + 1);
-            *at(out, t, i)     = x0 * cos_a - x1 * sin_a;
-            *at(out, t, i + 1) = x0 * sin_a + x1 * cos_a;
-        }
-    }
+    rope_into(x, pos, out);
     return out;
 }
 
-Matrix rms_norm(Matrix x, Matrix weight) {
-    Matrix m = empty(x.rows, x.cols);
+void rms_norm_into(Matrix x, Matrix weight, Matrix out) {
+#ifdef SAFETY
+    assume_shape(weight, 1, x.cols);
+    assert_owned_shape(out, x.rows, x.cols);
+#endif
     for (size_t i=0; i<x.rows; i++) {
         float rms = 0;
         for (size_t j=0; j<x.cols; j++) {
@@ -61,32 +88,65 @@ Matrix rms_norm(Matrix x, Matrix weight) {
         }
         rms = rms/x.cols;
         rms += RMS_NORM_EPS;
-        float i_rms = 1.0f / sqrtf(rms); // sub with the cool quake III algo hahaha
+        float i_rms = 1.0f / sqrtf(rms);
         for (size_t j=0; j<x.cols; j++) {
-            *at(m, i, j) = *at(x, i, j) * *at(weight, 0, j) * i_rms;
+            *at(out, i, j) = *at(x, i, j) * *at(weight, 0, j) * i_rms;
         }
     }
-    return m;
 }
 
-Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos) {
+void decode_gqa_into(Matrix x,
+                     QMatrix Wq,
+                     QMatrix Wk,
+                     QMatrix Wv,
+                     QMatrix Wo,
+                     LayerCache cache,
+                     size_t pos,
+                     Matrix out) {
     size_t T = pos + 1;
 #ifdef SAFETY
     assume_shape(x, 1, HIDDEN_SIZE);
     assume_shape(Wq, HIDDEN_SIZE, HIDDEN_SIZE);
-    assume_shape(Wk, HIDDEN_SIZE, KV_SIZE);
-    assume_shape(Wv, HIDDEN_SIZE, KV_SIZE);
+    assume_shape(Wk, KV_SIZE, HIDDEN_SIZE);
+    assume_shape(Wv, KV_SIZE, HIDDEN_SIZE);
     assume_shape(Wo, HIDDEN_SIZE, HIDDEN_SIZE);
+    assert(T <= MAX_SEQ_LEN);
+    assert_owned_shape(out, 1, HIDDEN_SIZE);
 #endif
 
-    Matrix q_proj = matmul(x, Wq);
-    Matrix k_proj = matmul(x, Wk);
-    Matrix v = matmul(x, Wv);
+    float q_proj_data[HIDDEN_SIZE];
+    float k_proj_data[KV_SIZE];
+    float v_data[KV_SIZE];
+    float q_data[HIDDEN_SIZE];
+    float k_data[KV_SIZE];
+    float o_data[HIDDEN_SIZE];
+    float scores_data[MAX_SEQ_LEN];
+    float attn_data[MAX_SEQ_LEN];
+    float hh_data[HEAD_DIM];
+    Buffer q_proj_buf;
+    Buffer k_proj_buf;
+    Buffer v_buf;
+    Buffer q_buf;
+    Buffer k_buf;
+    Buffer o_buf;
+    Buffer scores_buf;
+    Buffer attn_buf;
+    Buffer hh_buf;
+    Matrix q_proj = stack_mat(&q_proj_buf, q_proj_data, 1, HIDDEN_SIZE);
+    Matrix k_proj = stack_mat(&k_proj_buf, k_proj_data, 1, KV_SIZE);
+    Matrix v = stack_mat(&v_buf, v_data, 1, KV_SIZE);
+    Matrix q = stack_mat(&q_buf, q_data, 1, HIDDEN_SIZE);
+    Matrix k = stack_mat(&k_buf, k_data, 1, KV_SIZE);
+    Matrix O = stack_mat(&o_buf, o_data, 1, HIDDEN_SIZE);
+    Matrix scores = stack_mat(&scores_buf, scores_data, 1, T);
+    Matrix attn = stack_mat(&attn_buf, attn_data, 1, T);
+    Matrix Hh = stack_mat(&hh_buf, hh_data, 1, HEAD_DIM);
 
-    Matrix q = rope(q_proj, pos);
-    Matrix k = rope(k_proj, pos);
-    free_mat(q_proj);
-    free_mat(k_proj);
+    qmatvec_into(x, Wq, q_proj);
+    qmatvec_into(x, Wk, k_proj);
+    qmatvec_into(x, Wv, v);
+    rope_into(q_proj, pos, q);
+    rope_into(k_proj, pos, k);
 
 #ifdef SAFETY
     assume_shape(q, 1, HIDDEN_SIZE);
@@ -101,47 +161,40 @@ Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCac
     copy(transpose(k), slice(cache.k, 0, KV_SIZE, pos, pos + 1));
     copy(transpose(v), slice(cache.v, 0, KV_SIZE, pos, pos + 1));
 
-    Matrix O = empty(1, HIDDEN_SIZE);
     const float attn_scale = 1.0f / sqrtf((float)HEAD_DIM);
     for (size_t qh = 0; qh < NUM_Q_HEADS; qh++) {
         size_t kvh = qh / (NUM_Q_HEADS / NUM_KV_HEADS);
         Matrix Qh = slice(q, 0, 1, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
         Matrix Kh = slice(cache.k, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
+        Matrix KhT = transpose(Kh);
         Matrix Vh = slice(cache.v, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
-        Matrix raw_scores = matmul(Qh, Kh); // 1 x T
-        Matrix scores = scale(raw_scores, attn_scale);
-        Matrix attn = softmax(scores);
-        free_mat(raw_scores);
-        Matrix Hh = matmul(attn, transpose(Vh)); // 1 x HEAD_DIM
         Matrix out_h = slice(O, 0, 1, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
+
+        matvec_into(Qh, KhT, scores);
+        scale_inplace(scores, attn_scale);
+        softmax_into(scores, attn);
+        matvec_into(attn, Vh, Hh);
         copy(Hh, out_h);
-        free_mat(scores);
-        free_mat(attn);
-        free_mat(Hh);
     }
-
-    free_mat(q);
-    free_mat(k);
-    free_mat(v);
-
-    Matrix out = matmul(O, Wo);
-    free_mat(O);
-    return out;
+    qmatvec_into(O, Wo, out);
 }
 
-Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache) {
+Matrix prefill_gqa(Matrix x, QMatrix Wq, QMatrix Wk, QMatrix Wv, QMatrix Wo, LayerCache cache) {
     size_t T = x.rows;
 #ifdef SAFETY
     assume_shape(x, T, HIDDEN_SIZE);
     assume_shape(Wq, HIDDEN_SIZE, HIDDEN_SIZE);
-    assume_shape(Wk, HIDDEN_SIZE, KV_SIZE);
-    assume_shape(Wv, HIDDEN_SIZE, KV_SIZE);
+    assume_shape(Wk, KV_SIZE, HIDDEN_SIZE);
+    assume_shape(Wv, KV_SIZE, HIDDEN_SIZE);
     assume_shape(Wo, HIDDEN_SIZE, HIDDEN_SIZE);
 #endif
 
-    Matrix Q_proj = matmul(x, Wq);
-    Matrix K_proj = matmul(x, Wk);
-    Matrix V = matmul(x, Wv);
+    Matrix Q_proj = empty(T, HIDDEN_SIZE);
+    Matrix K_proj = empty(T, KV_SIZE);
+    Matrix V = empty(T, KV_SIZE);
+    qmatmul_into(x, Wq, Q_proj);
+    qmatmul_into(x, Wk, K_proj);
+    qmatmul_into(x, Wv, V);
 
     Matrix Q = rope(Q_proj, 0);
     Matrix K = rope(K_proj, 0);
@@ -184,7 +237,8 @@ Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCa
     free_mat(K);
     free_mat(V);
 
-    Matrix out = matmul(O, Wo);
+    Matrix out = empty(T, HIDDEN_SIZE);
+    qmatmul_into(O, Wo, out);
     free_mat(O);
     return out;
 }
@@ -194,48 +248,73 @@ Matrix elementwise(Matrix a, Matrix b) {
     assume_shape(a, b.rows, b.cols);
 #endif
     Matrix m = empty(a.rows, a.cols);
-    
-    for (size_t i = 0; i < a.rows; i++) {
-        for (size_t j = 0; j < a.cols; j++) {
-            *at(m, i, j) = *at(a, i, j) * *at(b, i, j);
-        }
-    }
-    
+    elementwise_mul_into(a, b, m);
     return m;
 }
 
-Matrix ffn(Matrix x, Matrix gate, Matrix up, Matrix down) {
-    Matrix m = matmul(x, gate);
-    Matrix xgate = silu(m);
-    free_mat(m);
+void elementwise_mul_into(Matrix a, Matrix b, Matrix out) {
+#ifdef SAFETY
+    assume_shape(a, b.rows, b.cols);
+    assert_owned_shape(out, a.rows, a.cols);
+#endif
+    gating_kernel_into(a, b, out);
+}
 
-    Matrix xup = matmul(x, up);
-    Matrix ew = elementwise(xgate, xup);
-    free_mat(xgate);
+void ffn_decode_into(Matrix x, QMatrix gate, QMatrix up, QMatrix down, Matrix out) {
+#ifdef SAFETY
+    assume_shape(x, 1, HIDDEN_SIZE);
+    assume_shape(gate, INTERMEDIATE_SIZE, HIDDEN_SIZE);
+    assume_shape(up, INTERMEDIATE_SIZE, HIDDEN_SIZE);
+    assume_shape(down, HIDDEN_SIZE, INTERMEDIATE_SIZE);
+    assert_owned_shape(out, 1, HIDDEN_SIZE);
+#endif
+    float m_data[INTERMEDIATE_SIZE];
+    float xup_data[INTERMEDIATE_SIZE];
+    float ew_data[INTERMEDIATE_SIZE];
+    Buffer m_buf;
+    Buffer xup_buf;
+    Buffer ew_buf;
+    Matrix m = stack_mat(&m_buf, m_data, 1, INTERMEDIATE_SIZE);
+    Matrix xup = stack_mat(&xup_buf, xup_data, 1, INTERMEDIATE_SIZE);
+    Matrix ew = stack_mat(&ew_buf, ew_data, 1, INTERMEDIATE_SIZE);
+
+    qmatvec_into(x, gate, m);
+    silu_kernel_inplace(m);
+    qmatvec_into(x, up, xup);
+    gating_kernel_into(m, xup, ew);
+    qmatvec_into(ew, down, out);
+}
+
+void ffn_prefill_into(Matrix x, QMatrix gate, QMatrix up, QMatrix down, Matrix out) {
+#ifdef SAFETY
+    assume_shape(gate, INTERMEDIATE_SIZE, HIDDEN_SIZE);
+    assume_shape(up, INTERMEDIATE_SIZE, HIDDEN_SIZE);
+    assume_shape(down, HIDDEN_SIZE, INTERMEDIATE_SIZE);
+    assert_owned_shape(out, x.rows, HIDDEN_SIZE);
+#endif
+    Matrix m = empty(x.rows, INTERMEDIATE_SIZE);
+    Matrix xup = empty(x.rows, INTERMEDIATE_SIZE);
+    Matrix ew = empty(x.rows, INTERMEDIATE_SIZE);
+
+    qmatmul_into(x, gate, m);
+    silu_inplace(m);
+    qmatmul_into(x, up, xup);
+    elementwise_mul_into(m, xup, ew);
+    qmatmul_into(ew, down, out);
+    free_mat(m);
     free_mat(xup);
-    
-    Matrix out = matmul(ew, down);
     free_mat(ew);
-    
-    return out;
 }
 
 Matrix softmax(Matrix x) {
     Matrix out = empty(x.rows, x.cols);
-    for (size_t i = 0; i < x.rows; i++) {
-        float max_val = -INFINITY;
-        for (size_t j = 0; j < x.cols; j++) {
-            if (*at(x, i, j) > max_val) {
-                max_val = *at(x, i, j);
-            }
-        }
-        float sum = 0.0f;
-        for (size_t j = 0; j < x.cols; j++) {
-            sum += expf(*at(x, i, j) - max_val);
-        }
-        for (size_t j = 0; j < x.cols; j++) {
-            *at(out, i, j) = expf(*at(x, i, j) - max_val) / sum;
-        }
-    }
+    softmax_into(x, out);
     return out;
+}
+
+void softmax_into(Matrix x, Matrix out) {
+#ifdef SAFETY
+    assert_owned_shape(out, x.rows, x.cols);
+#endif
+    softmax_kernel_into(x, out);
 }

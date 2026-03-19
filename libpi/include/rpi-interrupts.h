@@ -49,8 +49,8 @@ enum {
 //**************************************************
 // one-time initialization of general purpose 
 // interrupt state.
-static void inline interrupt_init_v(void *start, void *end) {
-    printk("about to install interrupt handlers\n");
+static inline void interrupt_init_v(void *start, void *end) {
+    // printk("about to install interrupt handlers\n");
     assert(start < end);
 
     // turn off global interrupts.  (should be off
@@ -73,12 +73,12 @@ static void inline interrupt_init_v(void *start, void *end) {
 
     // these writes better not migrate!
     gcc_mb();
-    for(int i = 0; i < n; i++)
+    for(unsigned i = 0; i < n; i++)
         dst[i] = src[i];
     gcc_mb();
 }
 
-static void inline interrupt_init(void) {
+static inline void interrupt_init(void) {
     // Copy interrupt vector table and FIQ handler.
     //   - <_interrupt_table>: start address 
     //   - <_interrupt_table_end>: end address 

@@ -3,8 +3,8 @@
 
 #include "matrix.h"
 
-#define NUM_MAIN_LAYERS 30
-#define NUM_SPEC_LAYERS 10 // TODO: idk this number yet 
+#define NUM_LAYERS 30
+#define MAX_NUM_LAYERS 30
 #define VOCAB_SIZE 49152
 #define HIDDEN_SIZE 576
 #define INTERMEDIATE_SIZE 1536
@@ -12,7 +12,7 @@
 #define NUM_Q_HEADS 9
 #define NUM_KV_HEADS 3
 #define KV_SIZE (NUM_KV_HEADS * HEAD_DIM)
-#define MAX_SEQ_LEN 2048
+#define MAX_SEQ_LEN 256
 #define RMS_NORM_EPS 1e-05f
 #define ROPE_THETA 100000.0f
 
@@ -23,52 +23,36 @@ typedef struct {
 
 typedef struct {
     Matrix attn_norm;
-    Matrix q, k, v, o;
-    
+    QMatrix q;
+    QMatrix k;
+    QMatrix v;
+    QMatrix o;
     Matrix ffn_norm;
-    Matrix gate, up, down;
+    QMatrix gate;
+    QMatrix up;
+    QMatrix down;
     LayerCache cache;
 } Block;
 
 typedef struct {
-    Matrix embeddings;
-} SmolLMHeadShard;
+    Matrix out_norm;
+    QMatrix lm_head;
+} Endpoint;
 
 typedef struct {
     size_t num_layers;
-    Block* blocks;
+    Block blocks[MAX_NUM_LAYERS];
 } SmolLMLayerShard;
 
 typedef struct {
-    Matrix final_norm;
-    Matrix lm_head;
-} SmolLMTailShard;
-
-typedef struct {
-    SmolLMHeadShard head;
+    Endpoint endpoint;
     SmolLMLayerShard layers;
-    SmolLMTailShard tail;
-} SmolLM2;
+} Model;
 
-SmolLMHeadShard load_head_shard();
-SmolLMLayerShard load_layer_shard(size_t start_layer, size_t end_layer);
-SmolLMTailShard load_tail_shard();
-void free_head_shard(SmolLMHeadShard head);
-void free_layer_shard(SmolLMLayerShard layers);
-void free_tail_shard(SmolLMTailShard tail);
-
-Matrix head_fwd(SmolLMHeadShard head, Matrix token_ids);
+Matrix block_prefill_fwd(Block b, Matrix x);
+void block_decode_fwd_into(Block b, Matrix x, size_t pos, Matrix out);
+void fwd_head_into(Endpoint endpoint, Matrix token_ids, Matrix out);
 Matrix layers_prefill_fwd(SmolLMLayerShard layers, Matrix x);
-Matrix layers_decode_fwd(SmolLMLayerShard layers, Matrix x, size_t pos);
-Matrix tail_fwd(SmolLMTailShard tail, Matrix x);
+void fwd_tail_last_into(Endpoint endpoint, Matrix x, Matrix logits_out);
 
-SmolLM2 load_model(size_t num_layers);
-SmolLM2 load_main_model();
-SmolLM2 load_spec_model();
-void free_model(SmolLM2 model);
-Matrix load_matrix(const char* name, const int layer);
-QMatrix load_qmatrix(const char *name, const int layer);
-void prefill(SmolLM2 model, Matrix x);
-Matrix fwd(SmolLM2 model, size_t token_id, size_t pos);
-
-#endif // MODEL_H
+#endif

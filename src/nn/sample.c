@@ -28,20 +28,20 @@ size_t sample(Matrix logits, float temperature) {
     assume_shape(logits, 1, VOCAB_SIZE);
     assert(temperature > 0.0f);
 #endif
-    Matrix scaled = scale(logits, 1.0f / temperature);
-    Matrix probs = softmax(scaled);
-    free_mat(scaled);
+    float probs_data[VOCAB_SIZE];
+    Buffer probs_buf;
+    Matrix probs = stack_mat(&probs_buf, probs_data, 1, VOCAB_SIZE);
+    scale_into(logits, 1.0f / temperature, probs);
+    softmax_into(probs, probs);
 
     float r = rand_float();
     float cum = 0.0f;
     for (size_t i = 0; i < (size_t)VOCAB_SIZE; i++) {
         cum += *at(probs, 0, i);
         if (r <= cum) {
-            free_mat(probs);
             return i;
         }
     }
 
-    free_mat(probs);
     return (size_t)VOCAB_SIZE - 1;
 }

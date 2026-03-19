@@ -1,5 +1,7 @@
 build/
 weights/
+firmware/*
+!firmware/config.txt
 .venv/
 __pycache__
 .vscode/

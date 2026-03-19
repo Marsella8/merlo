@@ -22,6 +22,8 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include "rpi-constants.h"
+
 
 /*****************************************************************************
  * output routines.
@@ -139,13 +141,14 @@ void dev_barrier(void);
 void *kmalloc(unsigned nbytes) ;
 void *kmalloc_notzero(unsigned nbytes) ;
 void *kmalloc_aligned(unsigned nbytes, unsigned alignment);
+void *malloc(size_t nbytes);
+void free(void *ptr);
 
 // initialize and set where the heap starts and give a maximum
 // size in bytes
 void kmalloc_init_set_start(void *addr, unsigned max_nbytes);
 static inline void kmalloc_init(void) {
-    unsigned long MB = 1024*1024;
-    kmalloc_init_set_start((void*)MB, 64*MB);
+    kmalloc_init_set_start((void*)HEAP_START_ADDR, HEAP_SIZE_BYTES);
 }
 
 // return pointer to the first free byte.  used for

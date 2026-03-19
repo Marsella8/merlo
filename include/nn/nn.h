@@ -4,22 +4,33 @@
 #include "matrix.h"
 #include "model.h"
 
-Matrix embed(Matrix embeddings, Matrix tokens);
+void embed_into(QMatrix lm_head, Matrix tokens, Matrix out);
 
 Matrix rope(Matrix x, size_t pos);
 
-Matrix rms_norm(Matrix x, Matrix weight);
+void rms_norm_into(Matrix x, Matrix weight, Matrix out);
 
-Matrix ffn(Matrix x, Matrix gate, Matrix up, Matrix down);
+void ffn_prefill_into(Matrix x, QMatrix gate, QMatrix up, QMatrix down, Matrix out);
+void ffn_decode_into(Matrix x, QMatrix gate, QMatrix up, QMatrix down, Matrix out);
 
 Matrix silu(Matrix x);
+void silu_inplace(Matrix x);
 
 Matrix elementwise(Matrix a, Matrix b);
+void elementwise_mul_into(Matrix a, Matrix b, Matrix out);
 
 Matrix softmax(Matrix x);
+void softmax_into(Matrix x, Matrix out);
 
-Matrix decode_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache, size_t pos);
+void decode_gqa_into(Matrix x,
+                     QMatrix Wq,
+                     QMatrix Wk,
+                     QMatrix Wv,
+                     QMatrix Wo,
+                     LayerCache cache,
+                     size_t pos,
+                     Matrix out);
 
-Matrix prefill_gqa(Matrix x, Matrix Wq, Matrix Wk, Matrix Wv, Matrix Wo, LayerCache cache);
+Matrix prefill_gqa(Matrix x, QMatrix Wq, QMatrix Wk, QMatrix Wv, QMatrix Wo, LayerCache cache);
 
 #endif // NN_H

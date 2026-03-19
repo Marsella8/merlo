@@ -1,62 +1,74 @@
-ARM = arm-none-eabi
-CC = $(ARM)-gcc
-OD = $(ARM)-objdump
-OCP = $(ARM)-objcopy
+SHELL := /bin/bash
 
-DEVICE_NAME ?= HEAD
-LIBPI_DIR = libpi
-LIBPI_ENV = CS140E_2026_PATH=$(abspath .)
+ROOT_DIR := /home/pietro/Documents/Code/merlo
+BUILD_DIR := $(ROOT_DIR)/build
 
-BUILD_DIR = build
-PROGRAM = merlo
-ELF = $(BUILD_DIR)/$(PROGRAM).elf
-BIN = $(BUILD_DIR)/$(PROGRAM).bin
-LIST = $(BUILD_DIR)/$(PROGRAM).list
+ARM := arm-none-eabi
+CC := $(ARM)-gcc
+OCP := $(ARM)-objcopy
 
-INCLUDES = -Iinclude -Iinclude/comm -Iinclude/nn -Iinclude/model -I$(LIBPI_DIR)/include -I$(LIBPI_DIR) -I$(LIBPI_DIR)/src -I$(LIBPI_DIR)/libc
-ARCH_FLAGS = -ffreestanding -nostdlib -nostartfiles -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mno-unaligned-access -mtp=soft
-WARN_FLAGS = -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable
-COMMON_FLAGS = -D__RPI__ -DDEVICE_NAME=\"$(DEVICE_NAME)\" -std=gnu99 $(ARCH_FLAGS) $(WARN_FLAGS) $(INCLUDES)
-OPT_FLAGS ?= -O3
-CFLAGS = $(COMMON_FLAGS) $(OPT_FLAGS)
-LDFLAGS = $(ARCH_FLAGS) -T $(LIBPI_DIR)/memmap
-LDLIBS = $(LIBPI_DIR)/libpi.a -lm -lgcc
-START = $(LIBPI_DIR)/staff-start.o
+LIBPI_DIR := $(ROOT_DIR)/libpi
+START := $(LIBPI_DIR)/staff-start.o
+LDLIBS := $(LIBPI_DIR)/libpi.a -lm -lgcc
+MAKE_BIN ?= /usr/bin/make
+PI_INSTALL := /home/pietro/Documents/cs140e-26win/bin/pi-install.linux
+PI0_DEVICE := /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_ce05c88fa13cef11a1e7b16ed981d5d9-if00-port0
+PI1_DEVICE := /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_384bb796a13cef11b18cba6ed981d5d9-if00-port0
 
-SRCS = $(shell find src -name '*.c' | sort)
-OBJS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+INCLUDES := -I$(ROOT_DIR)/include -I$(ROOT_DIR)/include/comm -I$(ROOT_DIR)/include/nn -I$(ROOT_DIR)/include/model -I$(ROOT_DIR)/include/kernels -I$(LIBPI_DIR)/include -I$(LIBPI_DIR) -I$(LIBPI_DIR)/src -I$(LIBPI_DIR)/libc
+ARCH_FLAGS := -ffreestanding -nostdlib -nostartfiles -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mno-unaligned-access -mtp=soft
+WARN_FLAGS := -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable
+COMMON_CFLAGS := -D__RPI__ -std=gnu99 $(ARCH_FLAGS) $(WARN_FLAGS) $(INCLUDES) -O3
+CFLAGS := $(COMMON_CFLAGS)
+LDFLAGS := $(ARCH_FLAGS) -T $(LIBPI_DIR)/memmap
 
-.PHONY: all clean debug release libpi libpi-clean
+COMMON_SRCS := \
+	$(wildcard $(ROOT_DIR)/src/comm/*.c) \
+	$(wildcard $(ROOT_DIR)/src/model/*.c) \
+	$(wildcard $(ROOT_DIR)/src/nn/*.c) \
+	$(wildcard $(ROOT_DIR)/src/kernels/*.c) \
+	$(wildcard $(ROOT_DIR)/src/kernels/*/*.c) \
+	$(ROOT_DIR)/src/utils.c
 
-all: $(BIN) $(LIST)
+# Rebuild when headers change (gcc -MMD is not used for these one-shot links).
+MERLO_HDRS := $(wildcard $(ROOT_DIR)/include/*.h) \
+	$(wildcard $(ROOT_DIR)/include/*/*.h) \
+	$(wildcard $(ROOT_DIR)/include/*/*/*.h)
+LIBPI_HDRS := $(wildcard $(LIBPI_DIR)/include/*.h)
 
-debug: OPT_FLAGS = -O0 -g -DSAFETY
-debug: clean $(BIN) $(LIST)
+HEAD_ELF := $(BUILD_DIR)/head.elf
+HEAD_BIN := $(BUILD_DIR)/head.bin
+PIPE_ELF := $(BUILD_DIR)/pipe.elf
+PIPE_BIN := $(BUILD_DIR)/pipe.bin
 
-release: OPT_FLAGS = -O3
-release: clean $(BIN) $(LIST)
+.PHONY: clean libpi head head-bin pipe pipe-bin
 
-libpi:
-	$(MAKE) -C $(LIBPI_DIR) $(LIBPI_ENV) PROGS=
-
-libpi-clean:
-	$(MAKE) -C $(LIBPI_DIR) $(LIBPI_ENV) clean
-
-clean:
-	rm -rf $(BUILD_DIR)
-
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-$(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
+$(HEAD_ELF): $(ROOT_DIR)/src/head.c $(COMMON_SRCS) $(MERLO_HDRS) $(LIBPI_HDRS) | libpi
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(COMMON_CFLAGS) $(LDFLAGS) -o $@ $(START) $(ROOT_DIR)/src/head.c $(COMMON_SRCS) $(LDLIBS)
 
-$(ELF): $(OBJS) | $(BUILD_DIR) libpi
-	$(CC) $(LDFLAGS) -o $@ $(START) $(OBJS) $(LDLIBS)
+$(PIPE_ELF): $(ROOT_DIR)/src/pipe.c $(COMMON_SRCS) $(MERLO_HDRS) $(LIBPI_HDRS) | libpi
+	mkdir -p $(dir $@)
+	$(CC) $(COMMON_CFLAGS) $(LDFLAGS) -o $@ $(START) $(ROOT_DIR)/src/pipe.c $(COMMON_SRCS) $(LDLIBS)
 
-$(BIN): $(ELF)
+$(HEAD_BIN): $(HEAD_ELF)
 	$(OCP) $< -O binary $@
 
-$(LIST): $(ELF)
-	$(OD) -d $< > $@
+$(PIPE_BIN): $(PIPE_ELF)
+	$(OCP) $< -O binary $@
+
+head-bin: $(HEAD_BIN)
+
+pipe-bin: $(PIPE_BIN)
+
+head: $(HEAD_BIN)
+	$(PI_INSTALL) --device $(PI0_DEVICE) $<
+
+pipe: $(PIPE_BIN)
+	$(PI_INSTALL) --device $(PI1_DEVICE) $<
+
+clean:
+	rm -rf $(ROOT_DIR)/build $(ROOT_DIR)/tests/build
+
+libpi:
+	$(MAKE_BIN) -C $(LIBPI_DIR) CS140E_2026_PATH=$(ROOT_DIR) PROGS=

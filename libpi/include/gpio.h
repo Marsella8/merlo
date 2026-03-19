@@ -86,6 +86,7 @@ void gpio_int_rising_edge(unsigned pin);
 // interrupt is delayed two clock cycles.   if you want  lower latency,
 // you should use async falling edge. (p99)
 void gpio_int_falling_edge(unsigned pin);
+void gpio_int_falling_edge_disable(unsigned pin);
 
 // p98: detect when input pin=1.  must clear the source of the 
 // interrupt before clearing the event or it will just retrigger.

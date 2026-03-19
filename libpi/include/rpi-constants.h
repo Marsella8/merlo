@@ -8,20 +8,19 @@
  * should add all the machine constants.
  */
 
-// this is 128MB --- should change to closer to what the r/pi A+ actually has.
-#ifndef STACK_ADDR
-#   define STACK_ADDR          0x8000000
-#   define STACK_ADDR2         0x7000000
-#endif
+// keep both stacks above the initramfs weight region.
+#define STACK_ADDR          0x1B000000
+#define STACK_ADDR2         0x1A000000
 
 // put right above STACK_ADDR
-#ifndef INT_STACK_ADDR
-#   define INT_STACK_ADDR      0x9000000  
-#   define INT_STACK_ADDR2      0xA000000  
-#endif
+#define INT_STACK_ADDR      0x1BC00000
+#define INT_STACK_ADDR2     0x1AC00000
 
-// free MB we can use.
-#define FREE_MB            0x6000000
+#define HEAP_SIZE_BYTES     0x6000000
+#define HEAP_END_ADDR       (STACK_ADDR - 0x01000000)
+#define HEAP_START_ADDR     (HEAP_END_ADDR - HEAP_SIZE_BYTES)
+
+#define FREE_MB             HEAP_SIZE_BYTES
 
 // this is the highest address we use --- above it is free.  should just rewrite 
 // the code so that we can malloc.

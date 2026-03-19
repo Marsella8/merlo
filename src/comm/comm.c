@@ -1,90 +1,96 @@
-#include <stdarg.h>
-#include <string.h>
-
 #include "comm.h"
+
+#include "cycle-count.h"
 #include "rpi.h"
 
-size_t const RECV_BUF_SIZE = 16 * 1024;
+#define PING   0x16
+#define PONG   0x06
+#define BEGIN  0x02
+#define DONE   0x15
+
+#define ACK_TIMEOUT_USEC   (110 * 1000)
+#define GUARD_BITS         16
+#define ALLOC_GUARD_BITS   4
+#define REPLY_DELAY_BITS   4
+
+#define COMM_MAX_FRAME_SIZE BYTE_QUEUE_CAPACITY
 
 StringQueue string_queue = {0};
 PacketQueue packet_queue = {0};
-RecvState recv_state = {0};
 
-static void reset_recv_state() {
-    recv_state.expected_len = 0;
-    recv_state.len_read = 0;
-    recv_state.payload_read = 0;
+static void delay_bits(sw_uart_t *uart, uint32_t nbits) {
+    uint32_t start = cycle_cnt_read();
+    while (cycle_cnt_read() - start < nbits * uart->cycle_per_bit)
+        ;
 }
 
-static void dispatch_buffer(Buffer* frame) {
-    char* str = maybe_deserialize_string(frame);
-    if (str != NULL) {
-        string_queue_enqueue(&string_queue, str);
-        return;
-    }
-
-    Packet pkt = maybe_deserialize_packet(frame);
-    if (pkt.matrix.rows != 0 || pkt.matrix.cols != 0) {
-        packet_queue_enqueue(&packet_queue, pkt);
-        return;
-    }
-
-    free_mat(pkt.matrix);
+static uint8_t get8_wait(sw_uart_t *uart) {
+    int r;
+    do {
+        r = sw_uart_get8_timeout(uart, 1000 * 1000);
+    } while (r < 0);
+    return (uint8_t)r;
 }
 
-void send(Buffer* data) {
-    uint32_t len = (uint32_t)data->size;
+sw_uart_t comm_init(uint8_t tx, uint8_t rx) {
+    cycle_cnt_init();
+    sw_uart_t uart = sw_uart_init(tx, rx, COMM_BAUD);
+    gpio_set_pullup(rx);
+    return uart;
+}
+
+int comm_send(sw_uart_t *uart, const Buffer *payload) {
+    assert(uart && payload);
+    assert(payload->size > 0 && payload->size <= COMM_MAX_FRAME_SIZE);
+
+    for (;;) {
+        sw_uart_put8(uart, PING);
+        if (sw_uart_get8_timeout(uart, ACK_TIMEOUT_USEC) == PONG)
+            break;
+    }
+
+    delay_bits(uart, GUARD_BITS);
+    sw_uart_put8(uart, BEGIN);
+
+    uint32_t len = (uint32_t)payload->size;
     for (int i = 0; i < 4; i++)
-        uart_put8((uint8_t)(len >> (i * 8)));
-    uint8_t* p = (uint8_t*)data->data;
-    for (size_t i = 0; i < data->size; i++)
-        uart_put8(p[i]);
+        sw_uart_put8(uart, (uint8_t)(len >> (i * 8)));
+
+    delay_bits(uart, ALLOC_GUARD_BITS);
+
+    const uint8_t *p = payload->data;
+    for (size_t i = 0; i < payload->size; i++)
+        sw_uart_put8(uart, p[i]);
+
+    return get8_wait(uart) == DONE;
 }
 
-void setup_recv() {
-    recv_state.buffer = buf(RECV_BUF_SIZE);
-    reset_recv_state();
-    uart_init();
-}
+Buffer *comm_recv(sw_uart_t *uart) {
+    assert(uart);
 
-void comm_setup() {
-    // TODO
-}
-
-void recv() {
-    while (uart_has_data()) {
-        uint8_t byte = (uint8_t)uart_get8();
-
-        // first 4 bytes are the length of the payload
-        if (recv_state.len_read < sizeof(uint32_t)) {
-            recv_state.expected_len |= ((uint32_t)byte) << (recv_state.len_read * 8);
-            recv_state.len_read++;
-            continue;
+    uint8_t b;
+    do {
+        b = get8_wait(uart);
+        if (b == PING) {
+            delay_bits(uart, REPLY_DELAY_BITS);
+            sw_uart_put8(uart, PONG);
         }
+    } while (b != BEGIN);
 
-        ((uint8_t*)recv_state.buffer->data)[recv_state.payload_read++] = byte;
-        if (recv_state.payload_read == recv_state.expected_len) {
-            Buffer frame = {
-                .data = recv_state.buffer->data,
-                .size = recv_state.expected_len,
-            };
-            dispatch_buffer(&frame);
-            reset_recv_state();
-        }
-    }
-}
+    uint8_t b0 = get8_wait(uart);
+    uint8_t b1 = get8_wait(uart);
+    uint8_t b2 = get8_wait(uart);
+    uint8_t b3 = get8_wait(uart);
+    uint32_t len = (uint32_t)b0 | ((uint32_t)b1 << 8) |
+                   ((uint32_t)b2 << 16) | ((uint32_t)b3 << 24);
+    assert(len > 0 && len <= COMM_MAX_FRAME_SIZE);
 
-void comm_print(const char* fmt, ...) {
-    char buf[1024];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintk(buf, sizeof(buf), fmt, args);
-    va_end(args);
-    if (strcmp(DEVICE_NAME, "HEAD") == 0) {
-        putk(buf);
-    } else {
-        Buffer* b = serialize_string(buf);
-        send(b);
-        free_buf(b);
-    }
+    Buffer *frame = buf(len);
+    uint8_t *data = frame->data;
+    for (size_t i = 0; i < len; i++)
+        data[i] = get8_wait(uart);
+
+    delay_bits(uart, REPLY_DELAY_BITS);
+    sw_uart_put8(uart, DONE);
+    return frame;
 }
