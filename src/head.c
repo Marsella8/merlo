@@ -43,7 +43,7 @@ static void send_embedded_tokens(sw_uart_t *uart,
 void notmain(void) {
     static const char *prompt = "The capital of France is";
 
-    size_t max_tokens = 100;
+    size_t max_tokens = 200;
     uint8_t *embed_ptr = HEAD_WEIGHTS_BASE + head_embed_offset();
     uint8_t *out_norm_ptr = HEAD_WEIGHTS_BASE + head_out_norm_offset();
 

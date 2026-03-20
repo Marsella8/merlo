@@ -51,11 +51,6 @@ typedef struct {
 
 Matrix block_prefill_fwd(Block b, Matrix x);
 void block_decode_fwd_into(Block b, Matrix x, size_t pos, Matrix out);
-
-/** Sum of per-layer attn vs FFN cycles across decode_profile_reset … next reset. */
-void decode_profile_reset(void);
-uint32_t decode_profile_attn_cycles(void);
-uint32_t decode_profile_ffn_cycles(void);
 void fwd_head_into(Endpoint endpoint, Matrix token_ids, Matrix out);
 Matrix layers_prefill_fwd(SmolLMLayerShard layers, Matrix x);
 void fwd_tail_last_into(Endpoint endpoint, Matrix x, Matrix logits_out);
