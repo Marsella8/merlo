@@ -1,11 +1,15 @@
-# merlo - Qwen0.8B
+# merlo - LLM
 
+Memory: given that there is basically no branching or stuff like that, we can keep everything either pinned (e.g. the weights that just sit fixed in memory and are viewed by the Matrices that access them) or allocate the buffers on the stack. We have some allocations for very minor objects, but fills up the queue very slowly.
 
-As in libraries like `numpy`, we model our matrices as a set of views (with an associated range, strides, ...) which access an underlying memory buffer (so e.g. X and tranpose(X) dont duplicate memory).
-For the pipelined architecture, we have fan in and fan out one for each  so we acna just use the mini-uart for each.
+Model is made up of an embedding table, and a set of layers, and an lm_head (but note that embedding table and lm_head are weight tied, so we count them once). Also the LM head is pretty big (Vocab size * Hidden size). So we have:
+- 1 Pi for the embedding table (does emebdding and "de-embedding")
+- 1 Pi for all the layers.
 
+The first pi passes the embedded token to the second pi, which passes it thjoruhg all the layers, and then passes itn to the first pi, which decodes it, gets the next token, which is embedded and passed to the second pi, ...
 
-Our inference spec is peculiar: we have multiple devices but a batch size of 1, and the pi does not have great banwdith and latency for cross pi communication. So we use pipeline parallelism, which enables us to store a larger model than what we would have on a single device. But by default, pipeline parallelism does not enable any speedup since at any point in time, only one stage of the pipeline is active. So we use speculative decoding. By default spec decoding generates a batch and then that batch is validated in parallel. But this does not solve our problem, so instead we change our spec decoding to be pipelined.
+Note that there is no parallelism, but it allows us to store larger models than what could fit on a single Pi.
 
+Quantization: we use 4Q_0 quantization, as a custom block format shaped like (...) because it fits better.
 
-We do 4Q_0 quantization since this way we can reduce the memory pressure.
+Kernels:
