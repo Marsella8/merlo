@@ -13,18 +13,25 @@ static inline void assert_owned_shape(Matrix m, size_t rows, size_t cols) {
 #endif
 }
 
+static float rope_freq[HEAD_DIM / 2];
+static bool rope_freq_ready = false;
+
 static void rope_into(Matrix x, size_t pos, Matrix out) {
 #ifdef SAFETY
     assume_shape(out, x.rows, x.cols);
     assert(x.cols % HEAD_DIM == 0);
 #endif
+    if (!rope_freq_ready) {
+        for (size_t i = 0; i < HEAD_DIM / 2; i++)
+            rope_freq[i] = 1.0f / powf(ROPE_THETA, (2.0f * (float)i) / HEAD_DIM);
+        rope_freq_ready = true;
+    }
     for (size_t t = 0; t < x.rows; t++) {
         float token_pos = (float)(pos + t);
         for (size_t head = 0; head < x.cols; head += HEAD_DIM) {
             size_t half = HEAD_DIM / 2;
             for (size_t i = 0; i < half; i++) {
-                float freq = 1.0f / powf(ROPE_THETA, (2.0f * (float)i) / HEAD_DIM);
-                float angle = token_pos * freq;
+                float angle = token_pos * rope_freq[i];
                 float cos_a = cosf(angle);
                 float sin_a = sinf(angle);
                 float x0 = *at(x, t, head + i);
@@ -121,26 +128,18 @@ void decode_gqa_into(Matrix x,
     float k_data[KV_SIZE];
     float o_data[HIDDEN_SIZE];
     float scores_data[MAX_SEQ_LEN];
-    float attn_data[MAX_SEQ_LEN];
-    float hh_data[HEAD_DIM];
     Buffer q_proj_buf;
     Buffer k_proj_buf;
     Buffer v_buf;
     Buffer q_buf;
     Buffer k_buf;
     Buffer o_buf;
-    Buffer scores_buf;
-    Buffer attn_buf;
-    Buffer hh_buf;
     Matrix q_proj = stack_mat(&q_proj_buf, q_proj_data, 1, HIDDEN_SIZE);
     Matrix k_proj = stack_mat(&k_proj_buf, k_proj_data, 1, KV_SIZE);
     Matrix v = stack_mat(&v_buf, v_data, 1, KV_SIZE);
     Matrix q = stack_mat(&q_buf, q_data, 1, HIDDEN_SIZE);
     Matrix k = stack_mat(&k_buf, k_data, 1, KV_SIZE);
     Matrix O = stack_mat(&o_buf, o_data, 1, HIDDEN_SIZE);
-    Matrix scores = stack_mat(&scores_buf, scores_data, 1, T);
-    Matrix attn = stack_mat(&attn_buf, attn_data, 1, T);
-    Matrix Hh = stack_mat(&hh_buf, hh_data, 1, HEAD_DIM);
 
     qmatvec_into(x, Wq, q_proj);
     qmatvec_into(x, Wk, k_proj);
@@ -161,20 +160,45 @@ void decode_gqa_into(Matrix x,
     copy(transpose(k), slice(cache.k, 0, KV_SIZE, pos, pos + 1));
     copy(transpose(v), slice(cache.v, 0, KV_SIZE, pos, pos + 1));
 
+    float *ck_base = (float *)cache.k.buffer->data + cache.k.offset;
+    float *cv_base = (float *)cache.v.buffer->data + cache.v.offset;
+    size_t cache_stride = (size_t)cache.k.row_stride;
     const float attn_scale = 1.0f / sqrtf((float)HEAD_DIM);
+
     for (size_t qh = 0; qh < NUM_Q_HEADS; qh++) {
         size_t kvh = qh / (NUM_Q_HEADS / NUM_KV_HEADS);
-        Matrix Qh = slice(q, 0, 1, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
-        Matrix Kh = slice(cache.k, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
-        Matrix KhT = transpose(Kh);
-        Matrix Vh = slice(cache.v, kvh * HEAD_DIM, (kvh + 1) * HEAD_DIM, 0, T);
-        Matrix out_h = slice(O, 0, 1, qh * HEAD_DIM, (qh + 1) * HEAD_DIM);
+        float *qh_ptr = q_data + qh * HEAD_DIM;
+        float *oh_ptr = o_data + qh * HEAD_DIM;
+        size_t kv_off = kvh * HEAD_DIM;
 
-        matvec_into(Qh, KhT, scores);
-        scale_inplace(scores, attn_scale);
-        softmax_into(scores, attn);
-        matvec_into(attn, Vh, Hh);
-        copy(Hh, out_h);
+        for (size_t t = 0; t < T; t++)
+            scores_data[t] = 0.0f;
+        for (size_t i = 0; i < HEAD_DIM; i++) {
+            float qi = qh_ptr[i] * attn_scale;
+            float *k_row = ck_base + (kv_off + i) * cache_stride;
+            for (size_t t = 0; t < T; t++)
+                scores_data[t] += qi * k_row[t];
+        }
+
+        float max_s = scores_data[0];
+        for (size_t t = 1; t < T; t++)
+            if (scores_data[t] > max_s) max_s = scores_data[t];
+        float sum = 0.0f;
+        for (size_t t = 0; t < T; t++) {
+            scores_data[t] = expf(scores_data[t] - max_s);
+            sum += scores_data[t];
+        }
+        float inv_sum = 1.0f / sum;
+        for (size_t t = 0; t < T; t++)
+            scores_data[t] *= inv_sum;
+
+        for (size_t i = 0; i < HEAD_DIM; i++) {
+            float *v_row = cv_base + (kv_off + i) * cache_stride;
+            float val = 0.0f;
+            for (size_t t = 0; t < T; t++)
+                val += scores_data[t] * v_row[t];
+            oh_ptr[i] = val;
+        }
     }
     qmatvec_into(O, Wo, out);
 }
@@ -270,19 +294,17 @@ void ffn_decode_into(Matrix x, QMatrix gate, QMatrix up, QMatrix down, Matrix ou
 #endif
     float m_data[INTERMEDIATE_SIZE];
     float xup_data[INTERMEDIATE_SIZE];
-    float ew_data[INTERMEDIATE_SIZE];
     Buffer m_buf;
     Buffer xup_buf;
-    Buffer ew_buf;
     Matrix m = stack_mat(&m_buf, m_data, 1, INTERMEDIATE_SIZE);
     Matrix xup = stack_mat(&xup_buf, xup_data, 1, INTERMEDIATE_SIZE);
-    Matrix ew = stack_mat(&ew_buf, ew_data, 1, INTERMEDIATE_SIZE);
 
     qmatvec_into(x, gate, m);
     silu_kernel_inplace(m);
     qmatvec_into(x, up, xup);
-    gating_kernel_into(m, xup, ew);
-    qmatvec_into(ew, down, out);
+    for (size_t i = 0; i < INTERMEDIATE_SIZE; i++)
+        m_data[i] *= xup_data[i];
+    qmatvec_into(m, down, out);
 }
 
 void ffn_prefill_into(Matrix x, QMatrix gate, QMatrix up, QMatrix down, Matrix out) {

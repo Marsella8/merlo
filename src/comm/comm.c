@@ -8,7 +8,7 @@
 #define BEGIN  0x02
 #define DONE   0x15
 
-#define ACK_TIMEOUT_USEC   (110 * 1000)
+#define ACK_TIMEOUT_USEC   (1000)
 #define GUARD_BITS         16
 #define ALLOC_GUARD_BITS   4
 #define REPLY_DELAY_BITS   4

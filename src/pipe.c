@@ -14,12 +14,15 @@ void notmain(void) {
     uint8_t *layer_ptr = PIPE_WEIGHTS_BASE;
 
     kmalloc_init();
+    void enable_dcache(void);
+    enable_dcache();
     sw_uart_t uart = comm_init(PIPE_TX_PIN, PIPE_RX_PIN);
 
     SmolLMLayerShard layers = load_layer_shard_at(layer_ptr, PIPE_NUM_LAYERS);
 
     while (true) {
         Buffer *frame = comm_recv(&uart);
+
         char *str = maybe_deserialize_string(frame);
         if (str != NULL) {
             Buffer *buf = serialize_string(str);
@@ -61,11 +64,13 @@ void notmain(void) {
             }
             out = x;
         }
+
         Buffer *buf = serialize_packet((Packet){
             .matrix = out,
             .token_pos = pkt.token_pos,
         });
         assert(comm_send(&uart, buf));
+
         free_buf(buf);
         free_mat(out);
     }

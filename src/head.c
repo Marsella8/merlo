@@ -41,27 +41,19 @@ static void send_embedded_tokens(sw_uart_t *uart,
 }
 
 void notmain(void) {
-    /* Sentence: "What is the capital of France? It's " (HF SmolLM2, add_special_tokens=false). */
-    // static const char *prompt = "What is the capital of France? It's ";
-    static const float prompt_hf_ids[] = {
-        1780.f, 314.f,  260.f,  3575.f, 282.f, 4649.f, 47.f,
-        657.f,  506.f,  216.f,
-    };
-    enum { PROMPT_NUM_TOKENS = sizeof(prompt_hf_ids) / sizeof(prompt_hf_ids[0]) };
+    static const char *prompt = "The capital of France is";
 
     size_t max_tokens = 100;
     uint8_t *embed_ptr = HEAD_WEIGHTS_BASE + head_embed_offset();
     uint8_t *out_norm_ptr = HEAD_WEIGHTS_BASE + head_out_norm_offset();
 
     kmalloc_init();
-    tokenizer_set_storage(HEAD_WEIGHTS_BASE, VOCAB_SIZE);
+    void enable_dcache(void);
+    enable_dcache();
     sw_uart_t uart = comm_init(HEAD_TX_PIN, HEAD_RX_PIN);
 
     Endpoint endpoint = load_endpoint_at(embed_ptr, out_norm_ptr);
-    // Matrix prompt_tokens = tokenize(prompt);
-    Buffer *prompt_tokens_buf = buf(PROMPT_NUM_TOKENS * sizeof(float));
-    memcpy(prompt_tokens_buf->data, prompt_hf_ids, PROMPT_NUM_TOKENS * sizeof(float));
-    Matrix prompt_tokens = mat(prompt_tokens_buf, 1, PROMPT_NUM_TOKENS);
+    Matrix prompt_tokens = tokenize(prompt);
     size_t token_pos = prompt_tokens.cols;
 
     send_embedded_tokens(&uart, endpoint, prompt_tokens, 0);
@@ -69,6 +61,7 @@ void notmain(void) {
 
     while (token_pos < max_tokens) {
         Buffer *frame = comm_recv(&uart);
+
         char *str = maybe_deserialize_string(frame);
         if (str != NULL) {
             putk(str);
@@ -94,6 +87,7 @@ void notmain(void) {
         Matrix next_token = stack_mat(&next_token_buf, next_token_data, 1, 1);
         Matrix embedded = stack_mat(&embedded_buf, embedded_data, 1, HIDDEN_SIZE);
         fwd_tail_last_into(endpoint, pkt.matrix, logits);
+
         size_t token = sample_last_token(logits);
         *at(next_token, 0, 0) = (float)token;
 
@@ -107,6 +101,7 @@ void notmain(void) {
             .token_pos = token_pos,
         });
         assert(comm_send(&uart, buf));
+
         free_buf(buf);
         token_pos++;
     }

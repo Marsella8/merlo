@@ -8,7 +8,7 @@
 #include "queue.h"
 #include "sw-uart.h"
 
-#define COMM_BAUD 115200
+#define COMM_BAUD (1000000)
 
 sw_uart_t comm_init(uint8_t tx, uint8_t rx);
 int comm_send(sw_uart_t *uart, const Buffer *payload);

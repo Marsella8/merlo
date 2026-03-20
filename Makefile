@@ -28,7 +28,8 @@ COMMON_SRCS := \
 	$(wildcard $(ROOT_DIR)/src/nn/*.c) \
 	$(wildcard $(ROOT_DIR)/src/kernels/*.c) \
 	$(wildcard $(ROOT_DIR)/src/kernels/*/*.c) \
-	$(ROOT_DIR)/src/utils.c
+	$(ROOT_DIR)/src/utils.c \
+	$(ROOT_DIR)/src/mmu.c
 
 # Rebuild when headers change (gcc -MMD is not used for these one-shot links).
 MERLO_HDRS := $(wildcard $(ROOT_DIR)/include/*.h) \
