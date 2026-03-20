@@ -61,15 +61,6 @@ void notmain(void) {
 
     while (token_pos < max_tokens) {
         Buffer *frame = comm_recv(&uart);
-
-        char *str = maybe_deserialize_string(frame);
-        if (str != NULL) {
-            putk(str);
-            free(str);
-            free_buf(frame);
-            continue;
-        }
-
         Packet pkt = maybe_deserialize_packet(frame);
         free_buf(frame);
         if (pkt.matrix.rows == 0 && pkt.matrix.cols == 0) {

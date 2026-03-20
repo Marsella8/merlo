@@ -8,8 +8,6 @@ typedef struct {
     size_t token_pos;
 } Packet;
 
-Buffer* serialize_string(char* string);
-char* maybe_deserialize_string(Buffer* buf);
 Buffer* serialize_packet(Packet pkt);
 Packet maybe_deserialize_packet(Buffer* buf);
 

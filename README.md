@@ -22,7 +22,7 @@ TODO:
 - Add valgrind to check for mem leaks. Good thing is that our stuff is pretty branchless so it shouldn't be hard.
 
 - Implement the engine and the rope + tests
-- Implement pipelining (comm.h, each has a in queue to process). 
+- Implement pipelining on the UART link if needed.
 - Implement Spec model plus inference on the Pi.
 
 Make sure numerics are correctness.

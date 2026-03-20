@@ -22,17 +22,6 @@ void notmain(void) {
 
     while (true) {
         Buffer *frame = comm_recv(&uart);
-
-        char *str = maybe_deserialize_string(frame);
-        if (str != NULL) {
-            Buffer *buf = serialize_string(str);
-            assert(comm_send(&uart, buf));
-            free_buf(buf);
-            free(str);
-            free_buf(frame);
-            continue;
-        }
-
         Packet pkt = maybe_deserialize_packet(frame);
         free_buf(frame);
         if (pkt.matrix.rows == 0 && pkt.matrix.cols == 0) {

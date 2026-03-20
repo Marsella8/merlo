@@ -4,34 +4,6 @@
 #include "matrix.h"
 #include "utils.h"
 
-char* STRING_ID = "STR";
-
-Buffer* serialize_string(char* string) {
-    size_t len = strlen(string) + 1;
-    size_t packet_len = strlen(STRING_ID) + len;
-    Buffer* b = buf(packet_len);
-    char* ptr = b->data;
-    
-    memcpy(ptr, STRING_ID, strlen(STRING_ID));
-    ptr += strlen(STRING_ID);
-    
-    memcpy(ptr, string, len);
-    
-    return b;
-}
-
-char* maybe_deserialize_string(Buffer* buf) {
-    size_t id_len = strlen(STRING_ID);
-    if (buf->size < id_len || memcmp(buf->data, STRING_ID, id_len) != 0) {
-        return NULL;
-    }
-    char* ptr = buf->data + id_len;
-    size_t len = strlen(ptr) + 1;
-    char* data = malloc(len);
-    memcpy(data, ptr, len);
-    return data;
-}
-
 const char* PKT_ID = "PKT";
 
 static inline char* insert(char* ptr, const void* src, size_t size) {

@@ -13,11 +13,6 @@
 #define ALLOC_GUARD_BITS   4
 #define REPLY_DELAY_BITS   4
 
-#define COMM_MAX_FRAME_SIZE BYTE_QUEUE_CAPACITY
-
-StringQueue string_queue = {0};
-PacketQueue packet_queue = {0};
-
 static void delay_bits(sw_uart_t *uart, uint32_t nbits) {
     uint32_t start = cycle_cnt_read();
     while (cycle_cnt_read() - start < nbits * uart->cycle_per_bit)
